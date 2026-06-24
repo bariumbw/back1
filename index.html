@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>禮券登記系統</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        select, input { padding: 10px; margin: 10px 0; width: 100%; max-width: 300px; display: block; }
+        button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h2>快速登記禮券</h2>
+    
+    <label>供應商：</label>
+    <select id="supplierSelect" onchange="updateGiftMenu()"></select>
+    
+    <label>禮券項目：</label>
+    <select id="giftSelect"></select>
+    
+    <input type="number" id="start" placeholder="起始編號" oninput="calcTotal()">
+    <input type="number" id="end" placeholder="結束編號" oninput="calcTotal()">
+    
+    <h3 id="totalDisplay">總張數: 0</h3>
+    <button onclick="register()">確認登記</button>
+
+    <script>
+        // 您的 API 網址
+        const API_URL = "https://script.google.com/macros/s/AKfycbzWBBk5HM3ncxp8LF0QX0SvDRYa4qb_xbyxk0-l_qnloJHjr3a3r7sanEI41_yMFYYz8g/exec";
+        let configData = [];
+
+        // 頁面載入時從 Google Sheet 的 Config 工作表讀取資料
+        window.onload = async () => {
+            const res = await fetch(API_URL);
+            configData = await res.json();
+            
+            const supplierSelect = document.getElementById('supplierSelect');
+            const suppliers = [...new Set(configData.map(r => r[0]))];
+            suppliers.forEach(s => {
+                let opt = document.createElement('option');
+                opt.value = s; opt.text = s;
+                supplierSelect.appendChild(opt);
+            });
+            updateGiftMenu();
+        };
+
+        function updateGiftMenu() {
+            const supplier = document.getElementById('supplierSelect').value;
+            const giftSelect = document.getElementById('giftSelect');
+            giftSelect.innerHTML = "";
+            configData.filter(r => r[0] === supplier).forEach(r => {
+                let opt = document.createElement('option');
+                opt.value = r[1]; opt.text = r[1];
+                giftSelect.appendChild(opt);
+            });
+        }
+
+        function calcTotal() {
+            const s = parseInt(document.getElementById('start').value);
+            const e = parseInt(document.getElementById('end').value);
+            document.getElementById('totalDisplay').innerText = "總張數: " + (e - s + 1 || 0);
+        }
+
+        async function register() {
+            const start = parseInt(document.getElementById('start').value);
+            const end = parseInt(document.getElementById('end').value);
+            const supplier = document.getElementById('supplierSelect').value;
+            const gift = document.getElementById('giftSelect').value;
+            
+            if (!start || !end) { alert("請輸入完整編號"); return; }
+            
+            let payload = [];
+            for(let i = start; i <= end; i++) {
+                payload.push({Batch: 1, Supplier: supplier, GiftName: gift, Code: i});
+            }
+
+            alert("登記中，請稍候...");
+            await fetch(API_URL, { method: "POST", body: JSON.stringify(payload) });
+            alert("登記完成！資料已寫入至 Google Sheet。");
+        }
+    </script>
+</body>
+</html>
