@@ -1,41 +1,55 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
     <title>禮券登記系統</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; }
-        select, input { padding: 10px; margin: 5px 0; width: 100%; max-width: 300px; display: block; }
-        button { padding: 12px; background-color: #4CAF50; color: white; border: none; cursor: pointer; width: 300px; }
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        select, input { padding: 10px; margin: 10px 0; width: 100%; max-width: 300px; display: block; border: 1px solid #ccc; }
+        button { padding: 12px 24px; background-color: #4CAF50; color: white; border: none; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
     </style>
 </head>
 <body>
-    <h2>禮券登記系統</h2>
+    <h2>快速登記禮券</h2>
+    
+    <label>供應商：</label>
     <select id="supplierSelect" onchange="updateGiftMenu()"></select>
+    
+    <label>禮券項目：</label>
     <select id="giftSelect"></select>
+    
     <input type="number" id="start" placeholder="起始編號" oninput="calcTotal()">
     <input type="number" id="end" placeholder="結束編號" oninput="calcTotal()">
+    
     <h3 id="totalDisplay">總張數: 0</h3>
-    <h3 id="batchDisplay">本次登記批次: 讀取中...</h3>
+    <h3 id="batchDisplay" style="color: #555;">本次登記批次: 讀取中...</h3>
+    
     <button id="submitBtn" onclick="register()">確認登記</button>
 
     <script>
-        const API_URL = "填入您的 API 網址"; 
-        let configData, currentBatch;
+        const API_URL = "填入您的 API 網址"; // <--- 請務必填入您的網址
+        let configData = [], currentBatch = 0;
 
         window.onload = async () => {
-            const res = await fetch(API_URL);
-            const result = await res.json();
-            configData = result.config;
-            currentBatch = result.batch;
-            document.getElementById('batchDisplay').innerText = "本次登記批次: " + currentBatch;
-            const suppliers = [...new Set(configData.map(r => r[0]))];
-            suppliers.forEach(s => {
-                let opt = document.createElement('option');
-                opt.value = s; opt.text = s;
-                supplierSelect.appendChild(opt);
-            });
-            updateGiftMenu();
+            try {
+                const res = await fetch(API_URL);
+                const result = await res.json();
+                
+                configData = result.config;
+                currentBatch = result.batch;
+                
+                document.getElementById('batchDisplay').innerText = "本次登記批次: " + currentBatch;
+                
+                const sSelect = document.getElementById('supplierSelect');
+                const suppliers = [...new Set(configData.map(r => r[0]))];
+                suppliers.forEach(s => {
+                    let opt = document.createElement('option');
+                    opt.value = s; opt.text = s;
+                    sSelect.appendChild(opt);
+                });
+                updateGiftMenu();
+            } catch (err) { alert("無法連線，請檢查 Apps Script 部署設定！"); }
         };
 
         function updateGiftMenu() {
@@ -61,19 +75,23 @@
             const end = parseInt(document.getElementById('end').value);
             const supplier = document.getElementById('supplierSelect').value;
             const gift = document.getElementById('giftSelect').value;
+            
+            if (!start || !end || start > end) { alert("編號輸入有誤"); return; }
 
-            // 1. 檢查重複
-            const res = await fetch(`${API_URL}?action=check&supplier=${encodeURIComponent(supplier)}&gift=${encodeURIComponent(gift)}`);
-            const existing = await res.json();
+            // 檢查重複
+            const checkRes = await fetch(`${API_URL}?action=check&supplier=${encodeURIComponent(supplier)}&gift=${encodeURIComponent(gift)}`);
+            const existing = await checkRes.json();
             let dups = [];
             for(let i = start; i <= end; i++) { if(existing.includes(i)) dups.push(i); }
             
             if(dups.length > 0) { alert("編號重複：" + dups.join(", ")); return; }
 
-            // 2. 送出
+            // 提交資料
             btn.disabled = true;
+            btn.innerText = "登記中...";
             let payload = [];
             for(let i = start; i <= end; i++) payload.push({Batch: currentBatch, Supplier: supplier, GiftName: gift, Code: i});
+            
             await fetch(API_URL, { method: "POST", body: JSON.stringify(payload) });
             alert("登記完成！");
             location.reload();
