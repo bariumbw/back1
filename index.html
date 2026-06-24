@@ -21,41 +21,37 @@
     <input type="number" id="start" placeholder="起始編號" oninput="calcTotal()">
     <input type="number" id="end" placeholder="結束編號" oninput="calcTotal()">
     
+    <h3 id="batchDisplay">本次登記批次: 讀取中...</h3>
     <h3 id="totalDisplay">總張數: 0</h3>
+    
     <button onclick="register()">確認登記</button>
 
     <script>
-        // 您的 API 網址
-        const API_URL = "https://script.google.com/macros/s/AKfycbzBRghUIxqi4JJlFShWCZCeihbRzdY5ZUANbaiDBF0OxDNk94kA-OdFlgR_vZDAIOFynA/exec";
+        const API_URL = "您的網頁應用程式網址"; // <--- 請務必填入您的真實網址
         let configData = [];
+        let currentBatch = 0;
 
-        // 頁面載入時從 Google Sheet 的 Config 工作表讀取資料
         window.onload = async () => {
-    const res = await fetch(API_URL);
-    const result = await res.json();
-    
-    configData = result.config; // 獲取配置表
-    const currentBatch = result.batch; // 獲取系統計算出的 Batch
-    
-    // 將 Batch 顯示在頁面上 (隱藏欄位或顯示給你看)
-    console.log("當前批次為:", currentBatch);
-    document.body.insertAdjacentHTML('afterbegin', `<h3>本次登記批次: ${currentBatch}</h3>`);
+            const res = await fetch(API_URL);
+            const result = await res.json();
+            
+            configData = result.config;
+            currentBatch = result.batch;
+            
+            // 顯示批次
+            document.getElementById('batchDisplay').innerText = "本次登記批次: " + currentBatch;
+            
+            // 載入選單
+            const supplierSelect = document.getElementById('supplierSelect');
+            const suppliers = [...new Set(configData.map(r => r[0]))];
+            suppliers.forEach(s => {
+                let opt = document.createElement('option');
+                opt.value = s; opt.text = s;
+                supplierSelect.appendChild(opt);
+            });
+            updateGiftMenu();
+        };
 
-    // ... 原本的下拉選單代碼 ...
-};
-
-// 修改 register() 函數，使用這個 currentBatch
-async function register() {
-    // ... 前面的邏輯 ...
-    
-    // 假設我們在 window.onload 把 batch 存成一個變數
-    const batch = await fetch(API_URL).then(r => r.json()).then(d => d.batch);
-    
-    for(let i = start; i <= end; i++) {
-        payload.push({Batch: batch, Supplier: supplier, GiftName: gift, Code: i});
-    }
-    // ... 後續送出代碼 ...
-}
         function updateGiftMenu() {
             const supplier = document.getElementById('supplierSelect').value;
             const giftSelect = document.getElementById('giftSelect');
@@ -79,16 +75,15 @@ async function register() {
             const supplier = document.getElementById('supplierSelect').value;
             const gift = document.getElementById('giftSelect').value;
             
-            if (!start || !end) { alert("請輸入完整編號"); return; }
-            
             let payload = [];
             for(let i = start; i <= end; i++) {
-                payload.push({Batch: 1, Supplier: supplier, GiftName: gift, Code: i});
+                payload.push({Batch: currentBatch, Supplier: supplier, GiftName: gift, Code: i});
             }
 
-            alert("登記中，請稍候...");
+            alert("登記中...");
             await fetch(API_URL, { method: "POST", body: JSON.stringify(payload) });
-            alert("登記完成！資料已寫入至 Google Sheet。");
+            alert("登記完成！");
+            location.reload(); // 重新整理以更新批次號碼
         }
     </script>
 </body>
