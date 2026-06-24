@@ -5,8 +5,9 @@
     <title>禮券登記系統</title>
     <style>
         body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-        select, input { padding: 10px; margin: 10px 0; width: 100%; max-width: 300px; display: block; }
+        select, input { padding: 10px; margin: 10px 0; width: 100%; max-width: 300px; display: block; border: 1px solid #ccc; }
         button { padding: 12px 24px; background-color: #4CAF50; color: white; border: none; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -24,7 +25,7 @@
     <h3 id="totalDisplay">總張數: 0</h3>
     <h3 id="batchDisplay" style="color: #555;">本次登記批次: 讀取中...</h3>
     
-    <button onclick="register()">確認登記</button>
+    <button id="submitBtn" onclick="register()">確認登記</button>
 
     <script>
         // 您的 API 網址
@@ -40,10 +41,8 @@
                 configData = result.config;
                 currentBatch = result.batch;
                 
-                // 顯示批次
                 document.getElementById('batchDisplay').innerText = "本次登記批次: " + currentBatch;
                 
-                // 載入選單
                 const supplierSelect = document.getElementById('supplierSelect');
                 const suppliers = [...new Set(configData.map(r => r[0]))];
                 suppliers.forEach(s => {
@@ -53,8 +52,7 @@
                 });
                 updateGiftMenu();
             } catch (err) {
-                console.error(err);
-                alert("無法連接伺服器，請檢查 Apps Script 部署設定！");
+                alert("無法連線，請檢查 Apps Script 部署設定！");
             }
         };
 
@@ -76,6 +74,7 @@
         }
 
         async function register() {
+            const btn = document.getElementById('submitBtn');
             const start = parseInt(document.getElementById('start').value);
             const end = parseInt(document.getElementById('end').value);
             const supplier = document.getElementById('supplierSelect').value;
@@ -86,34 +85,25 @@
                 return;
             }
 
+            // 防重入機制：禁用按鈕
+            btn.disabled = true;
+            btn.innerText = "登記中，請稍候...";
+
             let payload = [];
             for(let i = start; i <= end; i++) {
                 payload.push({Batch: currentBatch, Supplier: supplier, GiftName: gift, Code: i});
             }
 
-            alert("登記中，請稍候...");
-            await fetch(API_URL, { method: "POST", body: JSON.stringify(payload) });
-            alert("登記完成！資料已存入對應工作表。");
-            location.reload(); // 登記後重整以更新下一個批次號碼
+            try {
+                const response = await fetch(API_URL, { method: "POST", body: JSON.stringify(payload) });
+                alert("登記完成！");
+                location.reload(); 
+            } catch (e) {
+                alert("傳送失敗，請稍後再試。");
+                btn.disabled = false;
+                btn.innerText = "確認登記";
+            }
         }
-        async function register() {
-    const btn = event.target; // 獲取點擊的按鈕
-    const start = parseInt(document.getElementById('start').value);
-    const end = parseInt(document.getElementById('end').value);
-    
-    // 簡單驗證
-    if (!start || !end || start > end) { alert("編號輸入錯誤"); return; }
-    
-    // --- 防止重入機制 ---
-    btn.disabled = true; 
-    btn.innerText = "登記中，請稍候...";
-    
-    // ... 之後的 fetch 代碼 ...
-    
-    await fetch(API_URL, { method: "POST", body: JSON.stringify(payload) });
-    alert("登記完成！");
-    location.reload(); 
-}
     </script>
 </body>
 </html>
