@@ -31,19 +31,27 @@
 
         // 頁面載入時從 Google Sheet 的 Config 工作表讀取資料
         window.onload = async () => {
-            const res = await fetch(API_URL);
-            configData = await res.json();
-            
-            const supplierSelect = document.getElementById('supplierSelect');
-            const suppliers = [...new Set(configData.map(r => r[0]))];
-            suppliers.forEach(s => {
-                let opt = document.createElement('option');
-                opt.value = s; opt.text = s;
-                supplierSelect.appendChild(opt);
-            });
-            updateGiftMenu();
-        };
-
+    try {
+        const res = await fetch(API_URL);
+        const data = await res.json(); // 確保這裡成功拿到陣列
+        configData = data; 
+        
+        const supplierSelect = document.getElementById('supplierSelect');
+        // 取出不重複的供應商名稱
+        const suppliers = [...new Set(configData.map(r => r[0]))];
+        
+        suppliers.forEach(s => {
+            let opt = document.createElement('option');
+            opt.value = s;
+            opt.text = s;
+            supplierSelect.appendChild(opt);
+        });
+        updateGiftMenu();
+    } catch (e) {
+        console.error("讀取選單失敗:", e);
+        alert("無法讀取選單，請檢查網址或權限");
+    }
+};
         function updateGiftMenu() {
             const supplier = document.getElementById('supplierSelect').value;
             const giftSelect = document.getElementById('giftSelect');
