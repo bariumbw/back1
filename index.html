@@ -96,6 +96,24 @@
             alert("登記完成！資料已存入對應工作表。");
             location.reload(); // 登記後重整以更新下一個批次號碼
         }
+        async function register() {
+    const btn = event.target; // 獲取點擊的按鈕
+    const start = parseInt(document.getElementById('start').value);
+    const end = parseInt(document.getElementById('end').value);
+    
+    // 簡單驗證
+    if (!start || !end || start > end) { alert("編號輸入錯誤"); return; }
+    
+    // --- 防止重入機制 ---
+    btn.disabled = true; 
+    btn.innerText = "登記中，請稍候...";
+    
+    // ... 之後的 fetch 代碼 ...
+    
+    await fetch(API_URL, { method: "POST", body: JSON.stringify(payload) });
+    alert("登記完成！");
+    location.reload(); 
+}
     </script>
 </body>
 </html>
