@@ -87,13 +87,15 @@
 
         async function useGift() {
             const start = parseInt(document.getElementById('useStart').value), end = parseInt(document.getElementById('useEnd').value);
-            let dups = [];
+            let dups = [], notFound = [];
             for(let i = start; i <= end; i++) {
                 let res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', checkOnly: true, Code: i, Supplier: foundData.supplier, GiftName: foundData.gift}) })).json();
-                if(res.status === '已使用') dups.push(i);
+                if(res.status === 'not_found') notFound.push(i);
+                else if(res.status === '已使用') dups.push(i);
             }
+            if(notFound.length > 0) { alert("以下號碼未登記：\n" + notFound.join(", ")); return; }
             let isOverwrite = false;
-            if(dups.length > 0 && !confirm("以下號碼已使用：\n" + dups.join(", ") + "\n是否覆蓋並記錄於時間2？")) return;
+            if(dups.length > 0 && !confirm("以下號碼已使用：\n" + dups.join(", ") + "\n是否覆蓋並記錄於時間2與單號2？")) return;
             else if(dups.length > 0) isOverwrite = true;
             for(let i = start; i <= end; i++) {
                 await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', Code: i, OrderNo: document.getElementById('orderNo').value, Supplier: foundData.supplier, GiftName: foundData.gift, isOverwrite: (isOverwrite && dups.includes(i))}) });
