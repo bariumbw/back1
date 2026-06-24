@@ -2,57 +2,66 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>禮券登記系統</title>
+    <title>禮券系統</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-        select, input { padding: 10px; margin: 10px 0; width: 100%; max-width: 300px; display: block; border: 1px solid #ccc; }
-        button { padding: 12px 24px; background-color: #4CAF50; color: white; border: none; cursor: pointer; font-size: 16px; margin-top: 10px; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        body { font-family: sans-serif; padding: 20px; }
+        .tab-btn { padding: 10px 20px; cursor: pointer; }
+        .content { display: none; margin-top: 20px; }
+        .active { display: block; }
+        input, select { padding: 10px; margin: 5px 0; width: 100%; max-width: 300px; display: block; }
+        button { padding: 10px 20px; background: #4CAF50; color: white; border: none; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h2>快速登記禮券</h2>
-    
-    <label>供應商：</label>
-    <select id="supplierSelect" onchange="updateGiftMenu()"></select>
-    
-    <label>禮券項目：</label>
-    <select id="giftSelect"></select>
-    
-    <input type="number" id="start" placeholder="起始編號" oninput="calcTotal()">
-    <input type="number" id="end" placeholder="結束編號" oninput="calcTotal()">
-    
-    <h3 id="totalDisplay">總張數: 0</h3>
-    <h3 id="batchDisplay" style="color: #555;">本次登記批次: 讀取中...</h3>
-    
-    <button id="submitBtn" onclick="register()">確認登記</button>
+    <button class="tab-btn" onclick="showTab('register')">禮券登記</button>
+    <button class="tab-btn" onclick="showTab('use')">禮券使用</button>
+
+    <div id="register" class="content active">
+        <h2>禮券登記</h2>
+        <select id="supplierSelect" onchange="updateGiftMenu()"></select>
+        <select id="giftSelect"></select>
+        <input type="number" id="start" placeholder="起始編號" oninput="calcTotal()">
+        <input type="number" id="end" placeholder="結束編號" oninput="calcTotal()">
+        <h3 id="totalDisplay">總張數: 0</h3>
+        <h3 id="batchDisplay">本次批次: 讀取中...</h3>
+        <button id="regBtn" onclick="register()">確認登記</button>
+    </div>
+
+    <div id="use" class="content">
+        <h2>禮券使用</h2>
+        <input type="number" id="code" placeholder="請輸入禮券編號" onblur="findGift()">
+        <h3 id="infoDisplay">禮券資訊：請輸入編號...</h3>
+        <input type="text" id="orderNo" placeholder="請填寫單號 (Order No.)">
+        <button id="useBtn" onclick="useGift()" disabled>確認使用</button>
+    </div>
 
     <script>
-        // 已更新為您提供的最新網址
         const API_URL = "https://script.google.com/macros/s/AKfycbxx9WbFMkPFWESULzSs0y8AZfCR0zEKi-uk4F7Mjmw6iXU92ooEOR107fsAAJGTcEUy/exec";
-        let configData = [], currentBatch = 0;
+        let configData, currentBatch, foundData;
 
+        // 切換分頁
+        function showTab(id) {
+            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        // 初始化
         window.onload = async () => {
-            try {
-                const res = await fetch(API_URL);
-                const result = await res.json();
-                
-                configData = result.config;
-                currentBatch = result.batch;
-                
-                document.getElementById('batchDisplay').innerText = "本次登記批次: " + currentBatch;
-                
-                const sSelect = document.getElementById('supplierSelect');
-                const suppliers = [...new Set(configData.map(r => r[0]))];
-                suppliers.forEach(s => {
-                    let opt = document.createElement('option');
-                    opt.value = s; opt.text = s;
-                    sSelect.appendChild(opt);
-                });
-                updateGiftMenu();
-            } catch (err) { alert("無法連線，請檢查 Apps Script 部署設定！"); }
+            const res = await fetch(API_URL);
+            const result = await res.json();
+            configData = result.config;
+            currentBatch = result.batch;
+            document.getElementById('batchDisplay').innerText = "本次批次: " + currentBatch;
+            const suppliers = [...new Set(configData.map(r => r[0]))];
+            suppliers.forEach(s => {
+                let opt = document.createElement('option');
+                opt.value = s; opt.text = s;
+                supplierSelect.appendChild(opt);
+            });
+            updateGiftMenu();
         };
 
+        // --- 登記邏輯 ---
         function updateGiftMenu() {
             const s = document.getElementById('supplierSelect').value;
             const g = document.getElementById('giftSelect');
@@ -71,30 +80,43 @@
         }
 
         async function register() {
-            const btn = document.getElementById('submitBtn');
             const start = parseInt(document.getElementById('start').value);
             const end = parseInt(document.getElementById('end').value);
             const supplier = document.getElementById('supplierSelect').value;
             const gift = document.getElementById('giftSelect').value;
-            
-            if (!start || !end || start > end) { alert("編號輸入有誤"); return; }
 
             // 檢查重複
             const checkRes = await fetch(`${API_URL}?action=check&supplier=${encodeURIComponent(supplier)}&gift=${encodeURIComponent(gift)}`);
             const existing = await checkRes.json();
-            let dups = [];
-            for(let i = start; i <= end; i++) { if(existing.includes(i)) dups.push(i); }
-            
-            if(dups.length > 0) { alert("編號重複：" + dups.join(", ")); return; }
+            if(existing.some(c => c >= start && c <= end)) { alert("編號範圍內有重複！"); return; }
 
-            // 提交資料
-            btn.disabled = true;
-            btn.innerText = "登記中...";
+            document.getElementById('regBtn').disabled = true;
             let payload = [];
             for(let i = start; i <= end; i++) payload.push({Batch: currentBatch, Supplier: supplier, GiftName: gift, Code: i});
             
-            await fetch(API_URL, { method: "POST", body: JSON.stringify(payload) });
+            await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: payload}) });
             alert("登記完成！");
+            location.reload();
+        }
+
+        // --- 使用邏輯 ---
+        async function findGift() {
+            const code = document.getElementById('code').value;
+            const res = await fetch(`${API_URL}?action=find&code=${code}`);
+            foundData = await res.json();
+            if(foundData.found) {
+                document.getElementById('infoDisplay').innerText = `找到：${foundData.supplier} - ${foundData.gift} (狀態: ${foundData.status})`;
+                document.getElementById('useBtn').disabled = (foundData.status !== '未使用');
+            } else {
+                document.getElementById('infoDisplay').innerText = "找不到該編號或已使用";
+            }
+        }
+
+        async function useGift() {
+            const orderNo = document.getElementById('orderNo').value;
+            if(!orderNo) { alert("請填寫單號！"); return; }
+            await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', Code: document.getElementById('code').value, OrderNo: orderNo, Supplier: foundData.supplier, GiftName: foundData.gift}) });
+            alert("已更新狀態為：已使用");
             location.reload();
         }
     </script>
