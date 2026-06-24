@@ -6,7 +6,7 @@
     <style>
         body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
         select, input { padding: 10px; margin: 10px 0; width: 100%; max-width: 300px; display: block; }
-        button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; font-size: 16px; }
+        button { padding: 12px 24px; background-color: #4CAF50; color: white; border: none; cursor: pointer; font-size: 16px; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -21,35 +21,41 @@
     <input type="number" id="start" placeholder="起始編號" oninput="calcTotal()">
     <input type="number" id="end" placeholder="結束編號" oninput="calcTotal()">
     
-    <h3 id="batchDisplay">本次登記批次: 讀取中...</h3>
     <h3 id="totalDisplay">總張數: 0</h3>
+    <h3 id="batchDisplay" style="color: #555;">本次登記批次: 讀取中...</h3>
     
     <button onclick="register()">確認登記</button>
 
     <script>
-        const API_URL = "您的網頁應用程式網址"; // <--- 請務必填入您的真實網址
+        // 您的 API 網址
+        const API_URL = "https://script.google.com/macros/s/AKfycbxx9WbFMkPFWESULzSs0y8AZfCR0zEKi-uk4F7Mjmw6iXU92ooEOR107fsAAJGTcEUy/exec";
         let configData = [];
         let currentBatch = 0;
 
         window.onload = async () => {
-            const res = await fetch(API_URL);
-            const result = await res.json();
-            
-            configData = result.config;
-            currentBatch = result.batch;
-            
-            // 顯示批次
-            document.getElementById('batchDisplay').innerText = "本次登記批次: " + currentBatch;
-            
-            // 載入選單
-            const supplierSelect = document.getElementById('supplierSelect');
-            const suppliers = [...new Set(configData.map(r => r[0]))];
-            suppliers.forEach(s => {
-                let opt = document.createElement('option');
-                opt.value = s; opt.text = s;
-                supplierSelect.appendChild(opt);
-            });
-            updateGiftMenu();
+            try {
+                const res = await fetch(API_URL);
+                const result = await res.json();
+                
+                configData = result.config;
+                currentBatch = result.batch;
+                
+                // 顯示批次
+                document.getElementById('batchDisplay').innerText = "本次登記批次: " + currentBatch;
+                
+                // 載入選單
+                const supplierSelect = document.getElementById('supplierSelect');
+                const suppliers = [...new Set(configData.map(r => r[0]))];
+                suppliers.forEach(s => {
+                    let opt = document.createElement('option');
+                    opt.value = s; opt.text = s;
+                    supplierSelect.appendChild(opt);
+                });
+                updateGiftMenu();
+            } catch (err) {
+                console.error(err);
+                alert("無法連接伺服器，請檢查 Apps Script 部署設定！");
+            }
         };
 
         function updateGiftMenu() {
@@ -75,15 +81,20 @@
             const supplier = document.getElementById('supplierSelect').value;
             const gift = document.getElementById('giftSelect').value;
             
+            if (!start || !end || start > end) {
+                alert("編號輸入有誤，請檢查後再試");
+                return;
+            }
+
             let payload = [];
             for(let i = start; i <= end; i++) {
                 payload.push({Batch: currentBatch, Supplier: supplier, GiftName: gift, Code: i});
             }
 
-            alert("登記中...");
+            alert("登記中，請稍候...");
             await fetch(API_URL, { method: "POST", body: JSON.stringify(payload) });
-            alert("登記完成！");
-            location.reload(); // 重新整理以更新批次號碼
+            alert("登記完成！資料已存入對應工作表。");
+            location.reload(); // 登記後重整以更新下一個批次號碼
         }
     </script>
 </body>
