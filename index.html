@@ -30,7 +30,7 @@
 
     <div id="use" class="content">
         <h2>禮券使用</h2>
-        <textarea id="useCodes" placeholder="掃描或輸入禮券編號，每行一個" oninput="handleSingleCheck(this.value); calcTotal('useCodes', 'totalUse')"></textarea>
+        <textarea id="useCodes" placeholder="輸入禮券編號，每行一個" oninput="handleSingleCheck(this.value); calcTotal('useCodes', 'totalUse')"></textarea>
         <h3 id="useInfoDisplay">請輸入編號...</h3>
         <h3 id="totalUse">總張數: 0</h3>
         <input type="text" id="orderNo" placeholder="單號">
@@ -38,20 +38,27 @@
     </div>
 
     <script>
-        const API_URL = "https://script.google.com/macros/s/AKfycbz8jMVaJLH03E9ORniS8xEY_q_kJDq5mYbJ1H-XbKhclJphSfCn48IGBZDIybM9q-heVw/exec";
-        let configData, foundData;
+        const API_URL = "在此貼上您的 Google Web App 部署網址";
+        let foundData;
 
         function calcTotal(id, target) {
             const val = document.getElementById(id).value.trim();
-            const count = val ? val.split('\n').length : 0;
+            const count = val ? val.split('\n').filter(line => line.trim() !== "").length : 0;
             document.getElementById(target).innerText = "總張數: " + count;
+        }
+
+        function showTab(id) {
+            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            document.getElementById('btn' + id.charAt(0).toUpperCase() + id.slice(1)).classList.add('active');
         }
 
         async function register() {
             const btn = document.getElementById('regBtn');
             btn.innerText = "處理中..."; btn.disabled = true;
-            const batch = document.getElementById('batchInput').value;
             const codes = document.getElementById('regCodes').value.trim().split('\n');
+            const batch = document.getElementById('batchInput').value;
             const s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect').value;
             await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: codes.map(c => ({Batch: batch, Supplier: s, GiftName: g, Code: c}))}) });
             alert("登記完成！");
@@ -60,16 +67,12 @@
 
         async function handleSingleCheck(val) {
             const code = val.trim().split('\n')[0];
-            if(!code) return;
+            const btn = document.getElementById('useBtn');
+            if(!code) { btn.disabled = true; return; }
             const res = await (await fetch(`${API_URL}?action=find&code=${code}`)).json();
             foundData = res;
-            if (!res.found) {
-                document.getElementById('useInfoDisplay').innerText = "找不到該編號";
-                document.getElementById('useBtn').disabled = true;
-            } else {
-                document.getElementById('useInfoDisplay').innerText = `偵測到：${res.supplier} - ${res.gift} (狀態: ${res.used})`;
-                document.getElementById('useBtn').disabled = false;
-            }
+            document.getElementById('useInfoDisplay').innerText = res.found ? `偵測到：${res.supplier} - ${res.gift} (狀態: ${res.used})` : "找不到該編號";
+            btn.disabled = !res.found;
         }
 
         async function useGift() {
@@ -78,10 +81,8 @@
             const codes = document.getElementById('useCodes').value.trim().split('\n');
             try {
                 await fetch(API_URL, { method: "POST", body: JSON.stringify({
-                    mode: 'use', 
-                    Supplier: foundData.supplier, 
-                    GiftName: foundData.gift,
-                    payload: codes.map(c => ({Code: c, OrderNo: document.getElementById('orderNo').value}))
+                    mode: 'use', Supplier: foundData.supplier, GiftName: foundData.gift,
+                    payload: codes.filter(c => c.trim() !== "").map(c => ({Code: c.trim(), OrderNo: document.getElementById('orderNo').value}))
                 })});
                 alert("處理完成！");
                 document.getElementById('useCodes').value = "";
@@ -90,7 +91,8 @@
                 btn.innerText = "確認批量使用"; btn.disabled = false;
             }
         }
-        // ... (其他 showTab, window.onload 邏輯保持不變)
+        
+        // window.onload 邏輯維持不變
     </script>
 </body>
 </html>
