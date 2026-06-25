@@ -20,12 +20,13 @@
 
     <div id="register" class="content active">
         <h2>禮券登記</h2>
+        <input type="number" id="batchInput" placeholder="批次編號 (Batch)">
         <select id="supplierSelect" onchange="updateGiftMenu()"></select>
         <select id="giftSelect"></select>
         <input type="number" id="start" placeholder="起始編號" oninput="calcTotal('start', 'end', 'totalReg')">
         <input type="number" id="end" placeholder="結束編號" oninput="calcTotal('start', 'end', 'totalReg')">
         <h3 id="totalReg">總張數: 0</h3>
-        <button onclick="register()">確認登記</button>
+        <button id="regBtn" onclick="register()">確認登記</button>
     </div>
 
     <div id="use" class="content">
@@ -73,12 +74,16 @@
         }
 
         async function register() {
+            const btn = document.getElementById('regBtn');
+            btn.innerText = "處理中..."; btn.disabled = true;
+            const batch = document.getElementById('batchInput').value;
             const start = parseInt(document.getElementById('start').value), end = parseInt(document.getElementById('end').value);
             const s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect').value;
             let payload = [];
-            for(let i = start; i <= end; i++) payload.push({Supplier: s, GiftName: g, Code: i});
+            for(let i = start; i <= end; i++) payload.push({Batch: batch, Supplier: s, GiftName: g, Code: i});
             await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: payload}) });
             alert("登記完成！");
+            btn.innerText = "確認登記"; btn.disabled = false;
         }
 
         async function handleUseInput() {
@@ -96,27 +101,19 @@
         }
 
         async function useGift() {
+            const btn = document.getElementById('useBtn');
+            btn.innerText = "處理中..."; btn.disabled = true;
             const start = parseInt(document.getElementById('useStart').value), end = parseInt(document.getElementById('useEnd').value);
-            let dups = [], notFound = [];
+            let payload = [];
             for(let i = start; i <= end; i++) {
-                let res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', checkOnly: true, Code: i, Supplier: foundData.supplier, GiftName: foundData.gift}) })).json();
-                if(res.status === 'not_found') notFound.push(i);
-                else if(res.used === '已使用') dups.push(i);
+                payload.push({Code: i, OrderNo: document.getElementById('orderNo').value, Supplier: foundData.supplier, GiftName: foundData.gift});
             }
-            if(notFound.length > 0) { alert("未登記號碼：\n" + notFound.join(", ")); return; }
-            let isOverwrite = false;
-            if(dups.length > 0 && !confirm("已使用號碼：\n" + dups.join(", ") + "\n是否覆蓋並記錄？")) return;
-            else if(dups.length > 0) isOverwrite = true;
-            for(let i = start; i <= end; i++) {
-                await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', Code: i, OrderNo: document.getElementById('orderNo').value, Supplier: foundData.supplier, GiftName: foundData.gift, isOverwrite: (isOverwrite && dups.includes(i))}) });
-            }
+            await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', payload: payload}) });
             alert("處理完成！");
+            btn.innerText = "確認批量使用"; btn.disabled = false;
             document.getElementById('useStart').value = "";
             document.getElementById('useEnd').value = "";
-            document.getElementById('orderNo').value = "";
             document.getElementById('totalUse').innerText = "總張數: 0";
-            document.getElementById('useBtn').disabled = true;
-            document.getElementById('useInfoDisplay').innerText = "請輸入起始編號...";
         }
     </script>
 </body>
