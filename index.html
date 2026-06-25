@@ -61,15 +61,12 @@
         let configData, currentBatch;
 
         window.onload = async function() {
-            const res = await (await fetch(API_URL)).json();
+            var res = await (await fetch(API_URL)).json();
             configData = res.config;
             currentBatch = await (await fetch(API_URL + "?action=getBatch")).text();
             document.getElementById('batchDisplay').innerText = currentBatch;
-            
-            [...new Set(configData.map(function(r) { return r[0]; }))].forEach(function(s) {
-                var opt = document.createElement('option');
-                opt.value = s;
-                opt.text = s;
+            [...new Set(configData.map(function(r){ return r[0]; }))].forEach(function(s){
+                var opt = document.createElement('option'); opt.value = s; opt.text = s;
                 document.getElementById('supplierSelect').appendChild(opt);
             });
             updateGiftMenu();
@@ -80,137 +77,61 @@
             document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none';
         }
 
+        function applySuffixLogic(val, type) {
+            var s = val.toString().trim();
+            if (type === "suffix_12") return s.slice(-12);
+            if (type === "suffix_1") return s.slice(0, -1);
+            if (type === "suffix_2") return s.slice(0, -2);
+            return s;
+        }
+
         function getRangeCodes(start, end) {
-            var sVal = parseInt(start.slice(-12));
-            var eVal = parseInt(end.slice(-12));
-            var prefix = start.slice(0, -12);
+            var sVal = parseInt(start.slice(-12)), eVal = parseInt(end.slice(-12)), prefix = start.slice(0, -12);
             var codes = [];
-            for (var i = sVal; i <= eVal; i++) {
-                codes.push(prefix + i.toString().padStart(12, '0'));
-            }
+            for (var i = sVal; i <= eVal; i++) { codes.push(prefix + i.toString().padStart(12, '0')); }
             return codes;
         }
 
         async function register() {
-            var btn = document.getElementById('regBtn');
-            btn.innerText = "處理中...";
-            btn.disabled = true;
-            
-            var s = document.getElementById('supplierSelect').value;
-            var g = document.getElementById('giftSelect').value;
-            var codes = [];
-            
-            if (document.getElementById('regMode').value === 'list') {
-                codes = document.getElementById('regCodes').value.trim().split('\n').filter(Boolean);
-            } else {
-                codes = getRangeCodes(document.getElementById('regStart').value.trim(), document.getElementById('regEnd').value.trim());
-            }
-            
-            var response = await fetch(API_URL, {
-                method: "POST",
-                body: JSON.stringify({
-                    mode: 'register',
-                    payload: codes.map(function(c) { return {Batch: currentBatch, Supplier: s, GiftName: g, Code: c.toString()}; })
-                })
-            });
-            
-            var res = await response.json();
-            if (res.result === "success") {
-                alert("登記完成！成功新增 " + res.count + " 筆資料。");
-                location.reload();
-            } else {
-                alert("錯誤: " + res.message);
-                btn.innerText = "確認登記";
-                btn.disabled = false;
-            }
+            var btn = document.getElementById('regBtn'); btn.innerText = "處理中..."; btn.disabled = true;
+            var s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect').value;
+            var codes = (document.getElementById('regMode').value === 'list') ? document.getElementById('regCodes').value.trim().split('\n') : getRangeCodes(document.getElementById('regStart').value.trim(), document.getElementById('regEnd').value.trim());
+            var res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: codes.map(function(c){ return {Batch: currentBatch, Supplier: s, GiftName: g, Code: c.toString()}; })}) })).json();
+            alert(res.result === "success" ? "登記完成！成功新增 " + res.count + " 筆。" : "錯誤: " + res.message); location.reload();
         }
 
         async function useGift(confirmed) {
-            var btn = document.getElementById('useBtn');
-            btn.innerText = "處理中...";
-            
-            var s = document.getElementById('useStart').value.trim();
-            var e = document.getElementById('useEnd').value.trim();
-            var codes = [];
-            
-            if (document.getElementById('useMode').value === 'list') {
-                codes = document.getElementById('useCodes').value.trim().split('\n').filter(Boolean);
-            } else {
-                codes = getRangeCodes(s, e);
-            }
-            
-            var response = await fetch(API_URL, {
-                method: "POST",
-                body: JSON.stringify({
-                    mode: 'use',
-                    confirm: confirmed,
-                    Supplier: window.foundData.supplier,
-                    GiftName: window.foundData.gift,
-                    payload: codes.map(function(c) { 
-                        return {Code: c.toString(), OrderNo: document.getElementById('orderNo').value}; 
-                    })
-                })
-            });
-            
-            var res = await response.json();
+            var btn = document.getElementById('useBtn'); btn.innerText = "處理中...";
+            var s = document.getElementById('useStart').value.trim(), e = document.getElementById('useEnd').value.trim();
+            var codes = (document.getElementById('useMode').value === 'list') ? document.getElementById('useCodes').value.trim().split('\n') : getRangeCodes(s, e);
+            var res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', confirm: confirmed, Supplier: window.foundData.supplier, GiftName: window.foundData.gift, payload: codes.map(function(c){ return {Code: applySuffixLogic(c, window.foundData.calcType), OrderNo: document.getElementById('orderNo').value}; })}) })).json();
             btn.innerText = "確認批量使用";
-            
-            if (res.result === "error") {
-                alert(res.message);
-            } else if (res.result === "confirm") {
-                if (confirm(res.message)) {
-                    useGift(true);
-                }
-            } else {
-                alert("處理完成！");
-                location.reload();
-            }
+            if (res.result === "error") alert(res.message); else if (res.result === "confirm") { if(confirm(res.message)) useGift(true); } else { alert("處理完成！"); location.reload(); }
         }
 
-        function calcTotal(id, target) {
-            var count = document.getElementById(id).value.trim().split('\n').filter(Boolean).length;
-            document.getElementById(target).innerText = "總張數: " + count;
-        }
-
+        function calcTotal(id, target) { document.getElementById(target).innerText = "總張數: " + document.getElementById(id).value.trim().split('\n').filter(Boolean).length; }
         function calcTotalRange(p) {
-            var s = document.getElementById(p + 'Start').value.trim();
-            var e = document.getElementById(p + 'End').value.trim();
-            var count = 0;
-            if (s && e) {
-                count = parseInt(e.slice(-12)) - parseInt(s.slice(-12)) + 1;
-            }
-            document.getElementById(p + 'Total').innerText = "總張數: " + (count > 0 ? count : 0);
+            var s = document.getElementById(p + 'Start').value.trim(), e = document.getElementById(p + 'End').value.trim();
+            var type = (window.foundData && window.foundData.calcType) ? window.foundData.calcType : null;
+            var sV = parseInt(applySuffixLogic(s, type)), eV = parseInt(applySuffixLogic(e, type));
+            document.getElementById(p + 'Total').innerText = "總張數: " + (sV && eV ? (eV - sV + 1) : 0);
         }
 
         function handleSingleCheck(val) {
             var code = document.getElementById('useMode').value === 'list' ? val.trim().split('\n')[0] : document.getElementById('useStart').value.trim();
-            if (!code) return;
-            fetch(API_URL + "?action=find&code=" + encodeURIComponent(code))
-                .then(function(r) { return r.json(); })
-                .then(function(res) {
-                    window.foundData = res;
-                    document.getElementById('useInfoDisplay').innerText = res.found ? "偵測到：" + res.supplier + " - " + res.gift : "找不到該編號";
-                    document.getElementById('useBtn').disabled = !res.found;
-                    calcTotalRange('use');
-                });
-        }
-
-        function updateGiftMenu() {
-            var s = document.getElementById('supplierSelect').value;
-            var g = document.getElementById('giftSelect');
-            g.innerHTML = "";
-            configData.filter(function(r) { return r[0] === s; }).forEach(function(r) {
-                var opt = document.createElement('option');
-                opt.value = r[1];
-                opt.text = r[1];
-                g.appendChild(opt);
+            if(!code) return;
+            fetch(API_URL + "?action=find&code=" + encodeURIComponent(code)).then(function(r){ return r.json(); }).then(function(res){
+                window.foundData = res; document.getElementById('useInfoDisplay').innerText = res.found ? "偵測到：" + res.supplier + " - " + res.gift : "找不到";
+                document.getElementById('useBtn').disabled = !res.found; calcTotalRange('use');
             });
         }
 
-        function showTab(id) {
-            document.querySelectorAll('.content').forEach(function(c) { c.classList.remove('active'); });
-            document.getElementById(id).classList.add('active');
+        function updateGiftMenu() {
+            var s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect'); g.innerHTML = "";
+            configData.filter(function(r){ return r[0] === s; }).forEach(function(r){ var opt = document.createElement('option'); opt.value = r[1]; opt.text = r[1]; g.appendChild(opt); });
         }
+
+        function showTab(id) { document.querySelectorAll('.content').forEach(function(c){ c.classList.remove('active'); }); document.getElementById(id).classList.add('active'); }
     </script>
 </body>
 </html>
