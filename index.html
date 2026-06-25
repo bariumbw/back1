@@ -31,7 +31,7 @@
     </div>
 
     <script>
-        const url = "您的 Web App 網址";
+        const url = "https://script.google.com/macros/s/AKfycbz8jMVaJLH03E9ORniS8xEY_q_kJDq5mYbJ1H-XbKhclJphSfCn48IGBZDIybM9q-heVw/exec";
         async function init() {
             let res = await (await fetch(url)).json();
             document.getElementById('batch').innerText = await (await fetch(url+"?action=getBatch")).text();
