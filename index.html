@@ -33,7 +33,7 @@
             <textarea id="regCodes" oninput="calcTotal('regCodes', 'regTotal')"></textarea>
         </div>
         <div id="regRange">
-            <input type="text" id="regStart" placeholder="起始 (e.g. 039643105501)" oninput="calcTotalRange('reg')">
+            <input type="text" id="regStart" placeholder="起始" oninput="calcTotalRange('reg')">
             <input type="text" id="regEnd" placeholder="結束" oninput="calcTotalRange('reg')">
         </div>
         <h3 id="regTotal">總張數: 0</h3>
@@ -66,9 +66,12 @@
         <table>
             <thead>
                 <tr>
-                    <th onclick="sortLogs()">時間</th>
+                    <th>時間</th>
                     <th>供應商</th>
                     <th>項目</th>
+                    <th>首碼</th>
+                    <th>尾碼</th>
+                    <th>數量</th>
                     <th>單號</th>
                     <th>操作</th>
                 </tr>
@@ -79,8 +82,8 @@
     </div>
 
     <script>
-        const API_URL = "https://script.google.com/macros/s/AKfycbz8jMVaJLH03E9ORniS8xEY_q_kJDq5mYbJ1H-XbKhclJphSfCn48IGBZDIybM9q-heVw/exec";
-        let configData, currentBatch, allLogs = [], curPage = 1, sortOrder = -1;
+        const API_URL = "您的 Web App 網址";
+        let configData, currentBatch, allLogs = [], curPage = 1;
 
         window.onload = async function() {
             var res = await (await fetch(API_URL)).json();
@@ -106,9 +109,7 @@
             var filtered = allLogs.filter(function(l) {
                 return l.data[6].toString().includes(fO) && (!fD || new Date(l.data[7]).toISOString().split('T')[0] === fD);
             });
-            filtered.sort(function(a, b) {
-                return sortOrder * (new Date(b.data[7]) - new Date(a.data[7]));
-            });
+            filtered.sort(function(a, b) { return new Date(b.data[7]) - new Date(a.data[7]); });
             
             var start = (curPage - 1) * 50;
             var pageData = filtered.slice(start, start + 50);
@@ -117,10 +118,18 @@
             
             pageData.forEach(function(l) {
                 var tr = document.createElement('tr');
+                // 為了顯示完整，首碼取前6，尾碼取後6 (若長度不足則顯示完整)
+                var code = l.data[3].toString();
+                var head = code.length > 6 ? code.substring(0, 6) : code;
+                var tail = code.length > 6 ? code.substring(code.length - 6) : "";
+                
                 tr.innerHTML = "<td>" + new Date(l.data[7]).toLocaleString() + "</td>" +
                                "<td>" + l.data[1] + "</td>" +
                                "<td>" + l.data[2] + "</td>" +
-                               "<td>" + l.data[6] + "</td>" +
+                               "<td>" + head + "</td>" +
+                               "<td>" + tail + "</td>" +
+                               "<td>1</td>" +
+                               "<td>" + (l.data[6] || "") + "</td>" +
                                "<td><button onclick='editLog(\"" + l.sheet + "\", " + l.row + ")'>編</button>" +
                                    "<button onclick='delLog(\"" + l.sheet + "\", " + l.row + ")'>刪</button></td>";
                 body.appendChild(tr);
@@ -129,8 +138,6 @@
                 " <button onclick='curPage=Math.max(1, curPage-1); renderLogs()'>上一頁</button>" +
                 " <button onclick='curPage++; renderLogs()'>下一頁</button>";
         }
-
-        function sortLogs() { sortOrder *= -1; renderLogs(); }
 
         async function delLog(s, r) {
             if(confirm("確定刪除此筆記錄？")) {
