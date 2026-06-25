@@ -23,13 +23,10 @@
         <select id="giftSelect"></select>
         <select id="regMode" onchange="toggleMode('reg', this.value)">
             <option value="list">輸入清單</option>
-            <option value="range">首尾碼範圍</option>
+            <option value="range" selected>首尾碼範圍</option>
         </select>
-        <div id="regList"><textarea id="regCodes" placeholder="每行一個"></textarea></div>
-        <div id="regRange" style="display:none;">
-            <input type="number" id="regStart" placeholder="起始">
-            <input type="number" id="regEnd" placeholder="結束">
-        </div>
+        <div id="regList" style="display:none;"><textarea id="regCodes" placeholder="每行一個"></textarea></div>
+        <div id="regRange"><input type="number" id="regStart" placeholder="起始"><input type="number" id="regEnd" placeholder="結束"></div>
         <button id="regBtn" onclick="register()">確認登記</button>
     </div>
 
@@ -37,13 +34,10 @@
         <h2>禮券使用</h2>
         <select id="useMode" onchange="toggleMode('use', this.value)">
             <option value="list">輸入清單</option>
-            <option value="range">首尾碼範圍</option>
+            <option value="range" selected>首尾碼範圍</option>
         </select>
-        <div id="useList"><textarea id="useCodes" oninput="handleSingleCheck(this.value)"></textarea></div>
-        <div id="useRange" style="display:none;">
-            <input type="number" id="useStart" placeholder="起始" oninput="handleSingleCheck(this.value)">
-            <input type="number" id="useEnd" placeholder="結束">
-        </div>
+        <div id="useList" style="display:none;"><textarea id="useCodes" oninput="handleSingleCheck(this.value)"></textarea></div>
+        <div id="useRange"><input type="number" id="useStart" placeholder="起始" oninput="handleSingleCheck(this.value)"><input type="number" id="useEnd" placeholder="結束"></div>
         <h3 id="useInfoDisplay">請輸入編號...</h3>
         <input type="text" id="orderNo" placeholder="單號">
         <button id="useBtn" onclick="useGift()" disabled>確認批量使用</button>
@@ -78,19 +72,13 @@
 
         async function register() {
             const s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect').value;
-            let codes = [];
-            if(document.getElementById('regList').style.display !== 'none') {
-                codes = document.getElementById('regCodes').value.trim().split('\n');
-            } else {
-                for(let i=parseInt(document.getElementById('regStart').value); i<=parseInt(document.getElementById('regEnd').value); i++) codes.push(i.toString());
-            }
+            let codes = (document.getElementById('regMode').value === 'list') ? document.getElementById('regCodes').value.trim().split('\n') : Array.from({length: parseInt(document.getElementById('regEnd').value) - parseInt(document.getElementById('regStart').value) + 1}, (_, i) => (parseInt(document.getElementById('regStart').value) + i).toString());
             await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: codes.map(c => ({Batch: currentBatch, Supplier: s, GiftName: g, Code: c}))}) });
-            alert("登記完成！");
-            location.reload();
+            alert("登記完成！"); location.reload();
         }
 
         async function handleSingleCheck(val) {
-            const code = document.getElementById('useMode').value === 'list' ? val.trim().split('\n')[0] : val;
+            const code = (document.getElementById('useMode').value === 'list') ? val.trim().split('\n')[0] : val;
             if(!code) return;
             const res = await (await fetch(`${API_URL}?action=find&code=${code}`)).json();
             window.foundData = res;
@@ -99,10 +87,9 @@
         }
 
         async function useGift() {
-            const codes = (document.getElementById('useList').style.display !== 'none') ? document.getElementById('useCodes').value.trim().split('\n') : Array.from({length: parseInt(document.getElementById('useEnd').value) - parseInt(document.getElementById('useStart').value) + 1}, (_, i) => (parseInt(document.getElementById('useStart').value) + i).toString());
+            const codes = (document.getElementById('useMode').value === 'list') ? document.getElementById('useCodes').value.trim().split('\n') : Array.from({length: parseInt(document.getElementById('useEnd').value) - parseInt(document.getElementById('useStart').value) + 1}, (_, i) => (parseInt(document.getElementById('useStart').value) + i).toString());
             await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', Supplier: window.foundData.supplier, GiftName: window.foundData.gift, payload: codes.map(c => ({Code: c, OrderNo: document.getElementById('orderNo').value}))}) });
-            alert("處理完成！");
-            location.reload();
+            alert("處理完成！"); location.reload();
         }
         
         function showTab(id) {
