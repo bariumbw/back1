@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <title>禮券管理系統</title>
+    <meta charset="UTF-8"><title>禮券管理系統</title>
     <style>
         body { font-family: sans-serif; padding: 20px; }
         .tab-btn { padding: 10px; cursor: pointer; background: #eee; border: none; }
@@ -12,53 +11,42 @@
         input, select, textarea { padding: 10px; margin: 10px 0; width: 100%; max-width: 300px; display: block; }
         button { padding: 12px; background: #4CAF50; color: white; border: none; cursor: pointer; }
         button:disabled { background: #ccc; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     </style>
 </head>
 <body>
     <button class="tab-btn active" onclick="showTab('register')">禮券登記</button>
     <button class="tab-btn" onclick="showTab('use')">禮券使用</button>
+    <button class="tab-btn" onclick="showTab('logs')">流水帳記錄</button>
 
     <div id="register" class="content active">
         <h2>禮券登記 (Batch: <span id="batchDisplay">讀取中...</span>)</h2>
-        <select id="supplierSelect" onchange="updateGiftMenu()"></select>
-        <select id="giftSelect"></select>
-        <select id="regMode" onchange="toggleMode('reg', this.value)">
-            <option value="list">輸入清單</option>
-            <option value="range" selected>首尾碼範圍</option>
-        </select>
-        <div id="regList" style="display:none;">
-            <textarea id="regCodes" oninput="calcTotal('regCodes', 'regTotal')"></textarea>
-        </div>
-        <div id="regRange">
-            <input type="text" id="regStart" placeholder="起始 (e.g. 039643105501)" oninput="calcTotalRange('reg')">
-            <input type="text" id="regEnd" placeholder="結束" oninput="calcTotalRange('reg')">
-        </div>
-        <h3 id="regTotal">總張數: 0</h3>
-        <button id="regBtn" onclick="register()">確認登記</button>
+        <select id="supplierSelect" onchange="updateGiftMenu()"></select><select id="giftSelect"></select>
+        <select id="regMode" onchange="toggleMode('reg', this.value)"><option value="list">清單輸入</option><option value="range" selected>範圍輸入</option></select>
+        <div id="regList" style="display:none;"><textarea id="regCodes" oninput="calcTotal('regCodes', 'regTotal')"></textarea></div>
+        <div id="regRange"><input type="text" id="regStart" placeholder="起始 (e.g. 039643105501)" oninput="calcTotalRange('reg')"><input type="text" id="regEnd" placeholder="結束" oninput="calcTotalRange('reg')"></div>
+        <h3 id="regTotal">總張數: 0</h3><button id="regBtn" onclick="register()">確認登記</button>
     </div>
 
     <div id="use" class="content">
         <h2>禮券使用</h2>
-        <select id="useMode" onchange="toggleMode('use', this.value)">
-            <option value="list">輸入清單</option>
-            <option value="range" selected>首尾碼範圍</option>
-        </select>
-        <div id="useList" style="display:none;">
-            <textarea id="useCodes" oninput="handleSingleCheck(this.value); calcTotal('useCodes', 'useTotal')"></textarea>
-        </div>
-        <div id="useRange">
-            <input type="text" id="useStart" oninput="handleSingleCheck(this.value); calcTotalRange('use')">
-            <input type="text" id="useEnd" oninput="handleSingleCheck(this.value); calcTotalRange('use')">
-        </div>
-        <h3 id="useTotal">總張數: 0</h3>
-        <h3 id="useInfoDisplay">請輸入編號...</h3>
-        <input type="text" id="orderNo" placeholder="單號">
-        <button id="useBtn" onclick="useGift(false)" disabled>確認批量使用</button>
+        <select id="useMode" onchange="toggleMode('use', this.value)"><option value="list">清單輸入</option><option value="range" selected>範圍輸入</option></select>
+        <div id="useList" style="display:none;"><textarea id="useCodes" oninput="handleSingleCheck(this.value); calcTotal('useCodes', 'useTotal')"></textarea></div>
+        <div id="useRange"><input type="text" id="useStart" oninput="handleSingleCheck(this.value); calcTotalRange('use')"><input type="text" id="useEnd" oninput="handleSingleCheck(this.value); calcTotalRange('use')"></div>
+        <h3 id="useTotal">總張數: 0</h3><h3 id="useInfoDisplay">請輸入編號...</h3>
+        <input type="text" id="orderNo" placeholder="單號"><button id="useBtn" onclick="useGift(false)" disabled>確認批量使用</button>
+    </div>
+
+    <div id="logs" class="content">
+        <h2>流水帳記錄</h2>
+        <input type="text" id="filter" placeholder="篩選訂單號或日期..." oninput="renderLogs()">
+        <table id="logTable"><thead><tr><th>日期</th><th>供應商</th><th>項目</th><th>編號</th><th>單號</th><th>操作</th></tr></thead><tbody id="logBody"></tbody></table>
     </div>
 
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbz8jMVaJLH03E9ORniS8xEY_q_kJDq5mYbJ1H-XbKhclJphSfCn48IGBZDIybM9q-heVw/exec";
-        let configData, currentBatch;
+        let configData, currentBatch, allLogs = [];
 
         window.onload = async function() {
             var res = await (await fetch(API_URL)).json();
@@ -70,67 +58,50 @@
                 document.getElementById('supplierSelect').appendChild(opt);
             });
             updateGiftMenu();
+            loadLogs();
         };
 
-        function toggleMode(p, m) {
-            document.getElementById(p + 'List').style.display = (m === 'list') ? 'block' : 'none';
-            document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none';
+        async function loadLogs() {
+            allLogs = await (await fetch(API_URL + "?action=getLogs")).json();
+            renderLogs();
         }
 
-        function applySuffixLogic(val, type) {
-            var s = val.toString().trim();
-            if (type === "suffix_12") return s.slice(-12);
-            if (type === "suffix_1") return s.slice(0, -1);
-            if (type === "suffix_2") return s.slice(0, -2);
-            return s;
-        }
-
-        function getRangeCodes(start, end) {
-            var sVal = parseInt(start.slice(-12)), eVal = parseInt(end.slice(-12)), prefix = start.slice(0, -12);
-            var codes = [];
-            for (var i = sVal; i <= eVal; i++) { codes.push(prefix + i.toString().padStart(12, '0')); }
-            return codes;
-        }
-
-        async function register() {
-            var btn = document.getElementById('regBtn'); btn.innerText = "處理中..."; btn.disabled = true;
-            var s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect').value;
-            var codes = (document.getElementById('regMode').value === 'list') ? document.getElementById('regCodes').value.trim().split('\n') : getRangeCodes(document.getElementById('regStart').value.trim(), document.getElementById('regEnd').value.trim());
-            var res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: codes.map(function(c){ return {Batch: currentBatch, Supplier: s, GiftName: g, Code: c.toString()}; })}) })).json();
-            alert(res.result === "success" ? "登記完成！成功新增 " + res.count + " 筆。" : "錯誤: " + res.message); location.reload();
-        }
-
-        async function useGift(confirmed) {
-            var btn = document.getElementById('useBtn'); btn.innerText = "處理中...";
-            var s = document.getElementById('useStart').value.trim(), e = document.getElementById('useEnd').value.trim();
-            var codes = (document.getElementById('useMode').value === 'list') ? document.getElementById('useCodes').value.trim().split('\n') : getRangeCodes(s, e);
-            var res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', confirm: confirmed, Supplier: window.foundData.supplier, GiftName: window.foundData.gift, payload: codes.map(function(c){ return {Code: applySuffixLogic(c, window.foundData.calcType), OrderNo: document.getElementById('orderNo').value}; })}) })).json();
-            btn.innerText = "確認批量使用";
-            if (res.result === "error") alert(res.message); else if (res.result === "confirm") { if(confirm(res.message)) useGift(true); } else { alert("處理完成！"); location.reload(); }
-        }
-
-        function calcTotal(id, target) { document.getElementById(target).innerText = "總張數: " + document.getElementById(id).value.trim().split('\n').filter(Boolean).length; }
-        function calcTotalRange(p) {
-            var s = document.getElementById(p + 'Start').value.trim(), e = document.getElementById(p + 'End').value.trim();
-            var type = (window.foundData && window.foundData.calcType) ? window.foundData.calcType : null;
-            var sV = parseInt(applySuffixLogic(s, type)), eV = parseInt(applySuffixLogic(e, type));
-            document.getElementById(p + 'Total').innerText = "總張數: " + (sV && eV ? (eV - sV + 1) : 0);
-        }
-
-        function handleSingleCheck(val) {
-            var code = document.getElementById('useMode').value === 'list' ? val.trim().split('\n')[0] : document.getElementById('useStart').value.trim();
-            if(!code) return;
-            fetch(API_URL + "?action=find&code=" + encodeURIComponent(code)).then(function(r){ return r.json(); }).then(function(res){
-                window.foundData = res; document.getElementById('useInfoDisplay').innerText = res.found ? "偵測到：" + res.supplier + " - " + res.gift : "找不到";
-                document.getElementById('useBtn').disabled = !res.found; calcTotalRange('use');
+        function renderLogs() {
+            var filter = document.getElementById('filter').value.toLowerCase();
+            var body = document.getElementById('logBody');
+            body.innerHTML = "";
+            allLogs.filter(function(l){ return l.data[6].toString().toLowerCase().includes(filter) || l.data[7].toString().includes(filter); }).sort(function(a,b){ return b.row - a.row; }).forEach(function(l){
+                var tr = document.createElement('tr');
+                tr.innerHTML = "<td>"+l.data[7]+"</td><td>"+l.data[1]+"</td><td>"+l.data[2]+"</td><td>"+l.data[3]+"</td><td>"+l.data[6]+"</td><td><button onclick='editLog(\""+l.sheet+"\", "+l.row+")'>編</button><button onclick='delLog(\""+l.sheet+"\", "+l.row+")'>刪</button></td>";
+                body.appendChild(tr);
             });
         }
 
-        function updateGiftMenu() {
-            var s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect'); g.innerHTML = "";
-            configData.filter(function(r){ return r[0] === s; }).forEach(function(r){ var opt = document.createElement('option'); opt.value = r[1]; opt.text = r[1]; g.appendChild(opt); });
+        async function delLog(s, r) {
+            if(confirm("確定刪除此筆記錄？")){
+                await fetch(API_URL, {method:"POST", body:JSON.stringify({mode:'delete', sheet:s, row:r})});
+                loadLogs();
+            }
         }
 
+        async function editLog(s, r) {
+            var newNo = prompt("修改單號:");
+            if(newNo) {
+                await fetch(API_URL, {method:"POST", body:JSON.stringify({mode:'edit', sheet:s, row:r, newOrderNo:newNo})});
+                loadLogs();
+            }
+        }
+
+        // 既有邏輯保持不變
+        function toggleMode(p, m) { document.getElementById(p + 'List').style.display = (m === 'list') ? 'block' : 'none'; document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none'; }
+        function applySuffixLogic(val, type) { var s = val.toString().trim(); if(type==="suffix_12") return s.slice(-12); if(type==="suffix_1") return s.slice(0,-1); if(type==="suffix_2") return s.slice(0,-2); return s; }
+        function getRangeCodes(start, end) { var sVal = parseInt(start.slice(-12)), eVal = parseInt(end.slice(-12)), prefix = start.slice(0,-12), codes=[]; for(var i=sVal; i<=eVal; i++) codes.push(prefix + i.toString().padStart(12,'0')); return codes; }
+        async function register() { var btn = document.getElementById('regBtn'); btn.innerText = "處理中..."; btn.disabled = true; var s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect').value; var codes = (document.getElementById('regMode').value === 'list') ? document.getElementById('regCodes').value.trim().split('\n') : getRangeCodes(document.getElementById('regStart').value.trim(), document.getElementById('regEnd').value.trim()); var res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: codes.map(function(c){ return {Batch: currentBatch, Supplier: s, GiftName: g, Code: c.toString()}; })}) })).json(); alert(res.result === "success" ? "登記完成！" : "錯誤: " + res.message); location.reload(); }
+        async function useGift(confirmed) { var btn = document.getElementById('useBtn'); btn.innerText = "處理中..."; var s = document.getElementById('useStart').value.trim(), e = document.getElementById('useEnd').value.trim(); var codes = (document.getElementById('useMode').value === 'list') ? document.getElementById('useCodes').value.trim().split('\n') : getRangeCodes(s, e); var res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', confirm: confirmed, Supplier: window.foundData.supplier, GiftName: window.foundData.gift, payload: codes.map(function(c){ return {Code: applySuffixLogic(c, window.foundData.calcType), OrderNo: document.getElementById('orderNo').value}; })}) })).json(); btn.innerText = "確認批量使用"; if(res.result==="error") alert(res.message); else if(res.result==="confirm") { if(confirm(res.message)) useGift(true); } else { alert("處理完成！"); location.reload(); } }
+        function calcTotal(id, target) { document.getElementById(target).innerText = "總張數: " + document.getElementById(id).value.trim().split('\n').filter(Boolean).length; }
+        function calcTotalRange(p) { var s = document.getElementById(p+'Start').value.trim(), e = document.getElementById(p+'End').value.trim(); var type = (window.foundData && window.foundData.calcType) ? window.foundData.calcType : null; var sV = parseInt(applySuffixLogic(s, type)), eV = parseInt(applySuffixLogic(e, type)); document.getElementById(p+'Total').innerText = "總張數: " + (sV && eV ? (eV - sV + 1) : 0); }
+        function handleSingleCheck(val) { var code = document.getElementById('useMode').value==='list' ? val.trim().split('\n')[0] : document.getElementById('useStart').value.trim(); if(!code) return; fetch(API_URL + "?action=find&code=" + encodeURIComponent(code)).then(function(r){ return r.json(); }).then(function(res){ window.foundData = res; document.getElementById('useInfoDisplay').innerText = res.found ? "偵測到：" + res.supplier + " - " + res.gift : "找不到"; document.getElementById('useBtn').disabled = !res.found; calcTotalRange('use'); }); }
+        function updateGiftMenu() { var s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect'); g.innerHTML = ""; configData.filter(function(r){ return r[0]===s; }).forEach(function(r){ var opt=document.createElement('option'); opt.value=r[1]; opt.text=r[1]; g.appendChild(opt); }); }
         function showTab(id) { document.querySelectorAll('.content').forEach(function(c){ c.classList.remove('active'); }); document.getElementById(id).classList.add('active'); }
     </script>
 </body>
