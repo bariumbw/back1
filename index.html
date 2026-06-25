@@ -30,7 +30,20 @@
 
     <div id="use" class="content">
         <h2>禮券使用</h2>
-        <textarea id="useCodes" placeholder="輸入禮券編號，每行一個" oninput="handleSingleCheck(this.value); calcTotal('useCodes', 'totalUse')"></textarea>
+        <select id="modeSelect" onchange="toggleUseMode()">
+            <option value="list">1. 輸入編號 (每行一個)</option>
+            <option value="range">2. 首尾碼編號 (連續範圍)</option>
+        </select>
+
+        <div id="modeList">
+            <textarea id="useCodes" placeholder="輸入禮券編號，每行一個" oninput="handleSingleCheck(this.value); calcTotal('useCodes', 'totalUse')"></textarea>
+        </div>
+
+        <div id="modeRange" style="display:none;">
+            <input type="number" id="useStart" placeholder="起始編號" oninput="handleSingleCheck(this.value); calcTotalRange()">
+            <input type="number" id="useEnd" placeholder="結束編號" oninput="calcTotalRange()">
+        </div>
+
         <h3 id="useInfoDisplay">請輸入編號...</h3>
         <h3 id="totalUse">總張數: 0</h3>
         <input type="text" id="orderNo" placeholder="單號">
@@ -38,13 +51,32 @@
     </div>
 
     <script>
-        const API_URL = "https://script.google.com/macros/s/AKfycbz8jMVaJLH03E9ORniS8xEY_q_kJDq5mYbJ1H-XbKhclJphSfCn48IGBZDIybM9q-heVw/exec";
+        const API_URL = "https://script.google.com/macros/s/AKfycbz8jMVaJLH03E9ORniS8xEY_q_kJDq5mYbJ1H-XbKhclJphSfCn48IGBZDIybM9q-heVw/exec"; // 請填入
         let foundData;
 
+        // 計算總張數 (清單模式)
         function calcTotal(id, target) {
             const val = document.getElementById(id).value.trim();
             const count = val ? val.split('\n').filter(line => line.trim() !== "").length : 0;
             document.getElementById(target).innerText = "總張數: " + count;
+        }
+
+        // 計算總張數 (範圍模式)
+        function calcTotalRange() {
+            const start = parseInt(document.getElementById('useStart').value);
+            const end = parseInt(document.getElementById('useEnd').value);
+            const total = (end >= start) ? (end - start + 1) : 0;
+            document.getElementById('totalUse').innerText = "總張數: " + (isNaN(total) || total < 0 ? 0 : total);
+        }
+
+        // 切換使用模式
+        function toggleUseMode() {
+            const mode = document.getElementById('modeSelect').value;
+            document.getElementById('modeList').style.display = (mode === 'list') ? 'block' : 'none';
+            document.getElementById('modeRange').style.display = (mode === 'range') ? 'block' : 'none';
+            document.getElementById('totalUse').innerText = "總張數: 0";
+            document.getElementById('useBtn').disabled = true;
+            document.getElementById('useInfoDisplay').innerText = "請輸入編號...";
         }
 
         function showTab(id) {
@@ -54,45 +86,68 @@
             document.getElementById('btn' + id.charAt(0).toUpperCase() + id.slice(1)).classList.add('active');
         }
 
-        async function register() {
-            const btn = document.getElementById('regBtn');
-            btn.innerText = "處理中..."; btn.disabled = true;
-            const codes = document.getElementById('regCodes').value.trim().split('\n');
-            const batch = document.getElementById('batchInput').value;
-            const s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect').value;
-            await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: codes.map(c => ({Batch: batch, Supplier: s, GiftName: g, Code: c}))}) });
-            alert("登記完成！");
-            btn.innerText = "確認登記"; btn.disabled = false;
-        }
-
+        // 檢查單一編號 (用來啟用按鈕)
         async function handleSingleCheck(val) {
-            const code = val.trim().split('\n')[0];
-            const btn = document.getElementById('useBtn');
-            if(!code) { btn.disabled = true; return; }
+            let code = "";
+            if (document.getElementById('modeSelect').value === 'list') {
+                code = val.trim().split('\n')[0];
+            } else {
+                code = val;
+            }
+            if (!code) return;
             const res = await (await fetch(`${API_URL}?action=find&code=${code}`)).json();
             foundData = res;
             document.getElementById('useInfoDisplay').innerText = res.found ? `偵測到：${res.supplier} - ${res.gift} (狀態: ${res.used})` : "找不到該編號";
-            btn.disabled = !res.found;
+            document.getElementById('useBtn').disabled = !res.found;
         }
 
+        // 執行批量使用
         async function useGift() {
             const btn = document.getElementById('useBtn');
+            const mode = document.getElementById('modeSelect').value;
+            let codes = [];
+
+            if (mode === 'list') {
+                codes = document.getElementById('useCodes').value.trim().split('\n').filter(c => c.trim() !== "");
+            } else {
+                const start = parseInt(document.getElementById('useStart').value);
+                const end = parseInt(document.getElementById('useEnd').value);
+                for(let i = start; i <= end; i++) codes.push(i.toString());
+            }
+
             btn.innerText = "處理中..."; btn.disabled = true;
-            const codes = document.getElementById('useCodes').value.trim().split('\n');
             try {
                 await fetch(API_URL, { method: "POST", body: JSON.stringify({
                     mode: 'use', Supplier: foundData.supplier, GiftName: foundData.gift,
-                    payload: codes.filter(c => c.trim() !== "").map(c => ({Code: c.trim(), OrderNo: document.getElementById('orderNo').value}))
+                    payload: codes.map(c => ({Code: c.trim(), OrderNo: document.getElementById('orderNo').value}))
                 })});
                 alert("處理完成！");
                 document.getElementById('useCodes').value = "";
+                document.getElementById('useStart').value = "";
+                document.getElementById('useEnd').value = "";
                 document.getElementById('totalUse').innerText = "總張數: 0";
             } finally {
                 btn.innerText = "確認批量使用"; btn.disabled = false;
             }
         }
-        
-        // window.onload 邏輯維持不變
+
+        // 初始化選單
+        window.onload = async () => {
+            const res = await (await fetch(API_URL)).json();
+            const configData = res.config;
+            [...new Set(configData.map(r => r[0]))].forEach(s => {
+                let opt = document.createElement('option'); opt.value = s; opt.text = s;
+                document.getElementById('supplierSelect').appendChild(opt);
+            });
+            updateGiftMenu();
+        };
+
+        function updateGiftMenu() {
+            const s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect');
+            g.innerHTML = "";
+            const configData = window.configData || []; // 需確保 configData 全域可存取
+            configData.filter(r => r[0] === s).forEach(r => { let opt = document.createElement('option'); opt.value = r[1]; opt.text = r[1]; g.appendChild(opt); });
+        }
     </script>
 </body>
 </html>
