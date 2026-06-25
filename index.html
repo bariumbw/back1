@@ -1,17 +1,8 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <title>禮券管理系統</title>
-    <style>
-        body { font-family: sans-serif; padding: 20px; }
-        .tab-btn { padding: 10px; cursor: pointer; background: #eee; border: none; }
-        .tab-btn.active { background: #4CAF50; color: white; }
-        .content { display: none; margin-top: 20px; }
-        .content.active { display: block; }
-        input, select, textarea { padding: 10px; margin: 10px 0; width: 100%; max-width: 300px; display: block; }
-        button { padding: 12px; background: #4CAF50; color: white; border: none; cursor: pointer; }
-    </style>
+    <meta charset="UTF-8"><title>禮券管理系統</title>
+    <style>body { font-family: sans-serif; padding: 20px; } .content { display: none; margin-top: 20px; } .content.active { display: block; } .tab-btn.active { background: #4CAF50; color: white; }</style>
 </head>
 <body>
     <button class="tab-btn active" onclick="showTab('register')">禮券登記</button>
@@ -21,25 +12,15 @@
         <h2>禮券登記 (Batch: <span id="batchDisplay">讀取中...</span>)</h2>
         <select id="supplierSelect" onchange="updateGiftMenu()"></select>
         <select id="giftSelect"></select>
-        <select id="regMode" onchange="toggleMode('reg', this.value)">
-            <option value="list">輸入清單</option>
-            <option value="range" selected>首尾碼範圍</option>
-        </select>
-        <div id="regList" style="display:none;"><textarea id="regCodes" oninput="calcTotal('regCodes', 'regTotal')"></textarea></div>
-        <div id="regRange"><input type="number" id="regStart" placeholder="起始" oninput="calcTotalRange('reg')"><input type="number" id="regEnd" placeholder="結束" oninput="calcTotalRange('reg')"></div>
-        <h3 id="regTotal">總張數: 0</h3>
+        <select id="regMode" onchange="toggleMode('reg', this.value)"><option value="list">清單</option><option value="range" selected>範圍</option></select>
+        <div id="regRange"><input type="number" id="regStart" placeholder="起始"><input type="number" id="regEnd" placeholder="結束"></div>
         <button onclick="register()">確認登記</button>
     </div>
 
     <div id="use" class="content">
         <h2>禮券使用</h2>
-        <select id="useMode" onchange="toggleMode('use', this.value)">
-            <option value="list">輸入清單</option>
-            <option value="range" selected>首尾碼範圍</option>
-        </select>
-        <div id="useList" style="display:none;"><textarea id="useCodes" oninput="handleSingleCheck(this.value); calcTotal('useCodes', 'useTotal')"></textarea></div>
-        <div id="useRange"><input type="number" id="useStart" placeholder="起始" oninput="handleSingleCheck(this.value); calcTotalRange('use')"><input type="number" id="useEnd" placeholder="結束" oninput="calcTotalRange('use')"></div>
-        <h3 id="useTotal">總張數: 0</h3>
+        <input type="number" id="useStart" placeholder="起始編號" oninput="handleSingleCheck(this.value)">
+        <input type="number" id="useEnd" placeholder="結束編號">
         <h3 id="useInfoDisplay">請輸入編號...</h3>
         <input type="text" id="orderNo" placeholder="單號">
         <button id="useBtn" onclick="useGift()" disabled>確認批量使用</button>
@@ -48,67 +29,32 @@
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbz8jMVaJLH03E9ORniS8xEY_q_kJDq5mYbJ1H-XbKhclJphSfCn48IGBZDIybM9q-heVw/exec";
         let configData, currentBatch;
-
         window.onload = async () => {
             const res = await (await fetch(API_URL)).json();
             configData = res.config;
             currentBatch = await (await fetch(API_URL + "?action=getBatch")).text();
             document.getElementById('batchDisplay').innerText = currentBatch;
-            [...new Set(configData.map(r => r[0]))].forEach(s => {
-                let opt = document.createElement('option'); opt.value = s; opt.text = s;
-                document.getElementById('supplierSelect').appendChild(opt);
-            });
+            [...new Set(configData.map(r => r[0]))].forEach(s => { let opt = document.createElement('option'); opt.value = s; opt.text = s; document.getElementById('supplierSelect').appendChild(opt); });
             updateGiftMenu();
         };
-
-        function toggleMode(p, m) {
-            document.getElementById(p + 'List').style.display = (m === 'list') ? 'block' : 'none';
-            document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none';
-        }
-
-        function calcTotal(id, target) {
-            const val = document.getElementById(id).value.trim();
-            document.getElementById(target).innerText = "總張數: " + (val ? val.split('\n').length : 0);
-        }
-
-        function calcTotalRange(p) {
-            const s = document.getElementById(p + 'Start').value, e = document.getElementById(p + 'End').value;
-            document.getElementById(p + 'Total').innerText = "總張數: " + (e >= s ? (e - s + 1) : 0);
-        }
-
         function updateGiftMenu() {
-            const s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect');
-            g.innerHTML = "";
+            const s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect'); g.innerHTML = "";
             configData.filter(r => r[0] === s).forEach(r => { let opt = document.createElement('option'); opt.value = r[1]; opt.text = r[1]; g.appendChild(opt); });
         }
-
-        async function register() {
-            const s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect').value;
-            let codes = (document.getElementById('regMode').value === 'list') ? document.getElementById('regCodes').value.trim().split('\n') : Array.from({length: parseInt(document.getElementById('regEnd').value) - parseInt(document.getElementById('regStart').value) + 1}, (_, i) => (parseInt(document.getElementById('regStart').value) + i).toString());
-            await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: codes.map(c => ({Batch: currentBatch, Supplier: s, GiftName: g, Code: c}))}) });
-            alert("登記完成！"); location.reload();
-        }
-
         async function handleSingleCheck(val) {
-            const inputVal = (document.getElementById('useMode').value === 'list') ? val.trim().split('\n')[0] : document.getElementById('useStart').value;
-            if(!inputVal) return;
-            const res = await (await fetch(`${API_URL}?action=find&code=${inputVal}`)).json();
+            const res = await (await fetch(`${API_URL}?action=find&code=${val}`)).json();
             window.foundData = res;
-            document.getElementById('useInfoDisplay').innerText = res.found ? `偵測到：${res.supplier} - ${res.gift} (狀態: ${res.used})` : "找不到該編號";
+            document.getElementById('useInfoDisplay').innerText = res.found ? `偵測到：${res.supplier} - ${res.gift}` : "找不到編號";
             document.getElementById('useBtn').disabled = !res.found;
         }
-
         async function useGift() {
             const start = parseInt(document.getElementById('useStart').value), end = parseInt(document.getElementById('useEnd').value);
             let codes = Array.from({length: end - start + 1}, (_, i) => (start + i).toString());
-            await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', Supplier: window.foundData.supplier, GiftName: window.foundData.gift, payload: codes.map(c => ({Code: c, OrderNo: document.getElementById('orderNo').value}))}) });
+            await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', Supplier: window.foundData.supplier, GiftName: window.foundData.gift, calcType: window.foundData.calcType, payload: codes.map(c => ({Code: c, OrderNo: document.getElementById('orderNo').value}))}) });
             alert("處理完成！"); location.reload();
         }
-        
-        function showTab(id) {
-            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-        }
+        function showTab(id) { document.querySelectorAll('.content').forEach(c => c.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+        function toggleMode(p, m) { document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none'; }
     </script>
 </body>
 </html>
