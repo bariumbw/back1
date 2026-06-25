@@ -2,16 +2,16 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>完整禮券管理系統</title>
+    <title>禮券管理系統</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-        .tab-btn { padding: 10px 20px; cursor: pointer; background: #eee; border: none; margin-right: 5px; }
+        body { font-family: sans-serif; padding: 20px; }
+        .tab-btn { padding: 10px; cursor: pointer; background: #eee; border: none; }
         .tab-btn.active { background: #4CAF50; color: white; }
         .content { display: none; margin-top: 20px; }
         .content.active { display: block; }
-        input, select { padding: 10px; margin: 10px 0; width: 100%; max-width: 300px; display: block; border: 1px solid #ccc; }
-        button { padding: 12px 24px; background-color: #4CAF50; color: white; border: none; cursor: pointer; font-size: 16px; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        input, select { padding: 10px; margin: 10px 0; width: 100%; max-width: 300px; display: block; }
+        button { padding: 12px; background: #4CAF50; color: white; border: none; cursor: pointer; }
+        button:disabled { background: #ccc; }
     </style>
 </head>
 <body>
@@ -29,14 +29,15 @@
 
     <div id="use" class="content">
         <h2>禮券使用</h2>
-        <input type="number" id="useCode" placeholder="掃描或輸入禮券編號" oninput="handleUseInput()">
-        <h3 id="useInfoDisplay">請輸入編號...</h3>
-        <input type="text" id="orderNo" placeholder="請填寫單號 (Order No.)">
-        <button id="useBtn" onclick="useGift()" disabled>確認使用</button>
+        <input type="number" id="useStart" placeholder="起始編號" oninput="handleUseInput()">
+        <input type="number" id="useEnd" placeholder="結束編號">
+        <h3 id="useInfoDisplay">請輸入起始編號...</h3>
+        <input type="text" id="orderNo" placeholder="單號">
+        <button id="useBtn" onclick="useGift()" disabled>確認批量使用</button>
     </div>
 
     <script>
-        const API_URL = "填入您的 API 網址";
+        const API_URL = "https://script.google.com/macros/s/AKfycbz8jMVaJLH03E9ORniS8xEY_q_kJDq5mYbJ1H-XbKhclJphSfCn48IGBZDIybM9q-heVw/exec";
         let configData, foundData;
 
         function showTab(id) {
@@ -66,15 +67,15 @@
             const start = parseInt(document.getElementById('start').value), end = parseInt(document.getElementById('end').value);
             const s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect').value;
             let payload = [];
-            for(let i = start; i <= end; i++) payload.push({Supplier: s, GiftName: g, Code: i});
+            for(let i = start; i <= end; i++) payload.push({Batch: 'N/A', Supplier: s, GiftName: g, Code: i});
             await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: payload}) });
             alert("登記完成！");
         }
 
         async function handleUseInput() {
-            const rawCode = document.getElementById('useCode').value;
-            if(!rawCode) return;
-            const res = await (await fetch(`${API_URL}?action=find&code=${rawCode}`)).json();
+            const val = document.getElementById('useStart').value;
+            if(!val) return;
+            const res = await (await fetch(`${API_URL}?action=find&code=${val}`)).json();
             foundData = res;
             if (!res.found) {
                 document.getElementById('useInfoDisplay').innerText = "找不到該編號";
@@ -86,24 +87,26 @@
         }
 
         async function useGift() {
-            const code = foundData.code;
-            const orderNo = document.getElementById('orderNo').value;
-            const check = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', checkOnly: true, Code: code, Supplier: foundData.supplier, GiftName: foundData.gift}) })).json();
-            
-            let isOverwrite = false;
-            if (check.used === '已使用') {
-                if (!confirm("此禮券已使用，是否覆蓋並記錄至單號2與時間2？")) return;
-                isOverwrite = true;
+            const start = parseInt(document.getElementById('useStart').value), end = parseInt(document.getElementById('useEnd').value);
+            let dups = [], notFound = [];
+            for(let i = start; i <= end; i++) {
+                let res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', checkOnly: true, Code: i, Supplier: foundData.supplier, GiftName: foundData.gift}) })).json();
+                if(res.status === 'not_found') notFound.push(i);
+                else if(res.used === '已使用') dups.push(i);
             }
-
-            await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', Code: code, OrderNo: orderNo, Supplier: foundData.supplier, GiftName: foundData.gift, isOverwrite: isOverwrite}) });
+            if(notFound.length > 0) { alert("未登記號碼：\n" + notFound.join(", ")); return; }
+            let isOverwrite = false;
+            if(dups.length > 0 && !confirm("已使用號碼：\n" + dups.join(", ") + "\n是否覆蓋並記錄？")) return;
+            else if(dups.length > 0) isOverwrite = true;
+            for(let i = start; i <= end; i++) {
+                await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', Code: i, OrderNo: document.getElementById('orderNo').value, Supplier: foundData.supplier, GiftName: foundData.gift, isOverwrite: (isOverwrite && dups.includes(i))}) });
+            }
             alert("處理完成！");
-            
-            // 清空並保持頁面
-            document.getElementById('useCode').value = "";
+            document.getElementById('useStart').value = "";
+            document.getElementById('useEnd').value = "";
             document.getElementById('orderNo').value = "";
             document.getElementById('useBtn').disabled = true;
-            document.getElementById('useInfoDisplay').innerText = "請輸入編號...";
+            document.getElementById('useInfoDisplay').innerText = "請輸入起始編號...";
         }
     </script>
 </body>
