@@ -26,9 +26,12 @@
             <option value="range" selected>首尾碼範圍</option>
         </select>
         <div id="regList" style="display:none;"><textarea id="regCodes" oninput="calcTotal('regCodes', 'regTotal')"></textarea></div>
-        <div id="regRange"><input type="number" id="regStart" placeholder="起始" oninput="calcTotalRange('reg')"><input type="number" id="regEnd" placeholder="結束" oninput="calcTotalRange('reg')"></div>
+        <div id="regRange">
+            <input type="number" id="regStart" placeholder="起始" oninput="calcTotalRange('reg')">
+            <input type="number" id="regEnd" placeholder="結束" oninput="calcTotalRange('reg')">
+        </div>
         <h3 id="regTotal">總張數: 0</h3>
-        <button onclick="register()">確認登記</button>
+        <button id="regBtn" onclick="register()">確認登記</button>
     </div>
 
     <div id="use" class="content">
@@ -38,7 +41,10 @@
             <option value="range" selected>首尾碼範圍</option>
         </select>
         <div id="useList" style="display:none;"><textarea id="useCodes" oninput="handleSingleCheck(this.value); calcTotal('useCodes', 'useTotal')"></textarea></div>
-        <div id="useRange"><input type="number" id="useStart" placeholder="起始" oninput="handleSingleCheck(this.value); calcTotalRange('use')"><input type="number" id="useEnd" placeholder="結束" oninput="handleSingleCheck(this.value); calcTotalRange('use')"></div>
+        <div id="useRange">
+            <input type="number" id="useStart" placeholder="起始" oninput="handleSingleCheck(this.value); calcTotalRange('use')">
+            <input type="number" id="useEnd" placeholder="結束" oninput="handleSingleCheck(this.value); calcTotalRange('use')">
+        </div>
         <h3 id="useTotal">總張數: 0</h3>
         <h3 id="useInfoDisplay">請輸入編號...</h3>
         <input type="text" id="orderNo" placeholder="單號">
@@ -66,14 +72,28 @@
             document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none';
         }
 
+        function applySuffix(codes) {
+            if (!window.foundData || !window.foundData.calcType) return codes;
+            const type = window.foundData.calcType;
+            return codes.map(c => {
+                let p = c.toString().trim();
+                if (type === "suffix_12") return p.slice(-12);
+                if (type === "suffix_1") return p.slice(0, -1);
+                if (type === "suffix_2") return p.slice(0, -2);
+                return p;
+            });
+        }
+
         function calcTotal(id, target) {
-            const val = document.getElementById(id).value.trim();
-            document.getElementById(target).innerText = "總張數: " + (val ? val.split('\n').length : 0);
+            const val = document.getElementById(id).value.trim().split('\n').filter(Boolean);
+            const processed = (target === 'useTotal') ? applySuffix(val) : val;
+            document.getElementById(target).innerText = "總張數: " + processed.length;
         }
 
         function calcTotalRange(p) {
             const s = parseInt(document.getElementById(p + 'Start').value), e = parseInt(document.getElementById(p + 'End').value);
-            document.getElementById(p + 'Total').innerText = "總張數: " + (e >= s ? (e - s + 1) : 0);
+            const count = (e >= s) ? (e - s + 1) : 0;
+            document.getElementById(p + 'Total').innerText = "總張數: " + count;
         }
 
         function updateGiftMenu() {
@@ -83,6 +103,7 @@
         }
 
         async function register() {
+            document.getElementById('regBtn').innerText = "處理中...";
             const s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect').value;
             let codes = (document.getElementById('regMode').value === 'list') ? document.getElementById('regCodes').value.trim().split('\n') : Array.from({length: parseInt(document.getElementById('regEnd').value) - parseInt(document.getElementById('regStart').value) + 1}, (_, i) => (parseInt(document.getElementById('regStart').value) + i).toString());
             await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: codes.map(c => ({Batch: currentBatch, Supplier: s, GiftName: g, Code: c}))}) });
@@ -99,16 +120,12 @@
         }
 
         async function useGift(confirmed) {
+            document.getElementById('useBtn').innerText = "處理中...";
             const codes = (document.getElementById('useMode').value === 'list') ? document.getElementById('useCodes').value.trim().split('\n') : Array.from({length: parseInt(document.getElementById('useEnd').value) - parseInt(document.getElementById('useStart').value) + 1}, (_, i) => (parseInt(document.getElementById('useStart').value) + i).toString());
-            const processedCodes = codes.map(c => {
-                let p = c.trim();
-                if (window.foundData.calcType === "suffix_12") return p.slice(-12);
-                if (window.foundData.calcType === "suffix_1") return p.slice(0, -1);
-                if (window.foundData.calcType === "suffix_2") return p.slice(0, -2);
-                return p;
-            });
+            const processedCodes = applySuffix(codes);
             const response = await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', confirm: confirmed, Supplier: window.foundData.supplier, GiftName: window.foundData.gift, payload: processedCodes.map(c => ({Code: c, OrderNo: document.getElementById('orderNo').value}))}) });
             const res = await response.json();
+            document.getElementById('useBtn').innerText = "確認批量使用";
             if (res.result === "error") alert("警告：\n" + res.message);
             else if (res.result === "confirm") { if(confirm(res.message)) useGift(true); }
             else { alert("處理完成！"); document.getElementById('useBtn').disabled = true; }
