@@ -14,8 +14,8 @@
     </style>
 </head>
 <body>
-    <button class="tab-btn active" id="btnReg" onclick="showTab('register')">禮券登記</button>
-    <button class="tab-btn" id="btnUse" onclick="showTab('use')">禮券使用</button>
+    <button class="tab-btn active" onclick="showTab('register')">禮券登記</button>
+    <button class="tab-btn" onclick="showTab('use')">禮券使用</button>
 
     <div id="register" class="content active">
         <h2>禮券登記 (Batch: <span id="batchDisplay">讀取中...</span>)</h2>
@@ -27,7 +27,7 @@
         </select>
         <div id="regList" style="display:none;"><textarea id="regCodes" placeholder="每行一個"></textarea></div>
         <div id="regRange"><input type="number" id="regStart" placeholder="起始"><input type="number" id="regEnd" placeholder="結束"></div>
-        <button id="regBtn" onclick="register()">確認登記</button>
+        <button onclick="register()">確認登記</button>
     </div>
 
     <div id="use" class="content">
@@ -59,9 +59,9 @@
             updateGiftMenu();
         };
 
-        function toggleMode(prefix, mode) {
-            document.getElementById(prefix + 'List').style.display = (mode === 'list') ? 'block' : 'none';
-            document.getElementById(prefix + 'Range').style.display = (mode === 'range') ? 'block' : 'none';
+        function toggleMode(p, m) {
+            document.getElementById(p + 'List').style.display = (m === 'list') ? 'block' : 'none';
+            document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none';
         }
 
         function updateGiftMenu() {
@@ -78,7 +78,7 @@
         }
 
         async function handleSingleCheck(val) {
-            const code = (document.getElementById('useMode').value === 'list') ? val.trim().split('\n')[0] : val;
+            const code = (document.getElementById('useMode').value === 'list') ? val.trim().split('\n')[0] : document.getElementById('useStart').value;
             if(!code) return;
             const res = await (await fetch(`${API_URL}?action=find&code=${code}`)).json();
             window.foundData = res;
