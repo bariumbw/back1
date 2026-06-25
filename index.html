@@ -11,6 +11,7 @@
         .content.active { display: block; }
         input, select, textarea { padding: 10px; margin: 10px 0; width: 100%; max-width: 300px; display: block; }
         button { padding: 12px; background: #4CAF50; color: white; border: none; cursor: pointer; }
+        button:disabled { background: #ccc; }
     </style>
 </head>
 <body>
@@ -72,27 +73,28 @@
             document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none';
         }
 
-        function applySuffix(codes) {
-            if (!window.foundData || !window.foundData.calcType) return codes;
-            const type = window.foundData.calcType;
-            return codes.map(c => {
-                let p = c.toString().trim();
-                if (type === "suffix_12") return p.slice(-12);
-                if (type === "suffix_1") return p.slice(0, -1);
-                if (type === "suffix_2") return p.slice(0, -2);
-                return p;
-            });
+        function applySuffix(val, type) {
+            if (!type) return val;
+            let s = val.toString();
+            if (type === "suffix_12") return s.slice(-12);
+            if (type === "suffix_1") return s.slice(0, -1);
+            if (type === "suffix_2") return s.slice(0, -2);
+            return s;
         }
 
         function calcTotal(id, target) {
             const val = document.getElementById(id).value.trim().split('\n').filter(Boolean);
-            const processed = (target === 'useTotal') ? applySuffix(val) : val;
-            document.getElementById(target).innerText = "總張數: " + processed.length;
+            document.getElementById(target).innerText = "總張數: " + val.length;
         }
 
         function calcTotalRange(p) {
-            const s = parseInt(document.getElementById(p + 'Start').value), e = parseInt(document.getElementById(p + 'End').value);
-            const count = (e >= s) ? (e - s + 1) : 0;
+            const s = document.getElementById(p + 'Start').value;
+            const e = document.getElementById(p + 'End').value;
+            if(!s || !e) return;
+            const type = (window.foundData && window.foundData.calcType) ? window.foundData.calcType : null;
+            const startProcessed = parseInt(applySuffix(s, type));
+            const endProcessed = parseInt(applySuffix(e, type));
+            const count = (endProcessed >= startProcessed) ? (endProcessed - startProcessed + 1) : 0;
             document.getElementById(p + 'Total').innerText = "總張數: " + count;
         }
 
@@ -117,12 +119,13 @@
             window.foundData = res;
             document.getElementById('useInfoDisplay').innerText = res.found ? `偵測到：${res.supplier} - ${res.gift} (狀態: ${res.used})` : "找不到該編號";
             document.getElementById('useBtn').disabled = !res.found;
+            calcTotalRange('use'); // 偵測到類型後重算一次
         }
 
         async function useGift(confirmed) {
             document.getElementById('useBtn').innerText = "處理中...";
             const codes = (document.getElementById('useMode').value === 'list') ? document.getElementById('useCodes').value.trim().split('\n') : Array.from({length: parseInt(document.getElementById('useEnd').value) - parseInt(document.getElementById('useStart').value) + 1}, (_, i) => (parseInt(document.getElementById('useStart').value) + i).toString());
-            const processedCodes = applySuffix(codes);
+            const processedCodes = codes.map(c => applySuffix(c, window.foundData.calcType));
             const response = await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', confirm: confirmed, Supplier: window.foundData.supplier, GiftName: window.foundData.gift, payload: processedCodes.map(c => ({Code: c, OrderNo: document.getElementById('orderNo').value}))}) });
             const res = await response.json();
             document.getElementById('useBtn').innerText = "確認批量使用";
