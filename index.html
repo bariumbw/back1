@@ -25,7 +25,7 @@
             <option value="list">輸入清單</option>
             <option value="range" selected>首尾碼範圍</option>
         </select>
-        <div id="regList" style="display:none;"><textarea id="regCodes" placeholder="每行一個" oninput="calcTotal('regCodes', 'regTotal')"></textarea></div>
+        <div id="regList" style="display:none;"><textarea id="regCodes" oninput="calcTotal('regCodes', 'regTotal')"></textarea></div>
         <div id="regRange"><input type="number" id="regStart" placeholder="起始" oninput="calcTotalRange('reg')"><input type="number" id="regEnd" placeholder="結束" oninput="calcTotalRange('reg')"></div>
         <h3 id="regTotal">總張數: 0</h3>
         <button onclick="register()">確認登記</button>
@@ -64,7 +64,6 @@
         function toggleMode(p, m) {
             document.getElementById(p + 'List').style.display = (m === 'list') ? 'block' : 'none';
             document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none';
-            document.getElementById(p + 'Total').innerText = "總張數: 0";
         }
 
         function calcTotal(id, target) {
@@ -72,9 +71,9 @@
             document.getElementById(target).innerText = "總張數: " + (val ? val.split('\n').length : 0);
         }
 
-        function calcTotalRange(prefix) {
-            const s = parseInt(document.getElementById(prefix + 'Start').value), e = parseInt(document.getElementById(prefix + 'End').value);
-            document.getElementById(prefix + 'Total').innerText = "總張數: " + (e >= s ? (e - s + 1) : 0);
+        function calcTotalRange(p) {
+            const s = parseInt(document.getElementById(p + 'Start').value), e = parseInt(document.getElementById(p + 'End').value);
+            document.getElementById(p + 'Total').innerText = "總張數: " + (e >= s ? (e - s + 1) : 0);
         }
 
         function updateGiftMenu() {
@@ -101,7 +100,15 @@
 
         async function useGift() {
             const codes = (document.getElementById('useMode').value === 'list') ? document.getElementById('useCodes').value.trim().split('\n') : Array.from({length: parseInt(document.getElementById('useEnd').value) - parseInt(document.getElementById('useStart').value) + 1}, (_, i) => (parseInt(document.getElementById('useStart').value) + i).toString());
-            await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', Supplier: window.foundData.supplier, GiftName: window.foundData.gift, payload: codes.map(c => ({Code: c, OrderNo: document.getElementById('orderNo').value}))}) });
+            // 轉換編號以匹配 Config 的 CalcType
+            const processedCodes = codes.map(c => {
+                let p = c.trim();
+                if (window.foundData.calcType === "suffix_12") return p.slice(-12);
+                if (window.foundData.calcType === "suffix_1") return p.slice(0, -1);
+                if (window.foundData.calcType === "suffix_2") return p.slice(0, -2);
+                return p;
+            });
+            await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', Supplier: window.foundData.supplier, GiftName: window.foundData.gift, payload: processedCodes.map(c => ({Code: c, OrderNo: document.getElementById('orderNo').value}))}) });
             alert("處理完成！"); location.reload();
         }
         
