@@ -56,6 +56,7 @@
             <button id="nav-actPage" class="nav-btn" onclick="switchPage('actPage')">禮券啟用</button>
             <button id="nav-usePage" class="nav-btn" onclick="switchPage('usePage')">禮券使用</button>
             <button id="nav-recordsPage" class="nav-btn" onclick="switchPage('recordsPage')">流水帳記錄</button>
+            <button id="nav-usagePage" class="nav-btn" onclick="switchPage('usagePage')">使用量總數</button>
         </nav>
 
         <div id="regPage" class="page active">
@@ -181,6 +182,33 @@
                 </table>
             </div>
         </div>
+
+        <div id="usagePage" class="page">
+            <h2>使用量總數</h2>
+            <div style="background:#f9f9f9; padding:15px; border-radius:8px; margin-bottom:15px; display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+                <div class="form-group">
+                    <label>開始日期</label>
+                    <input type="date" id="usageStartDate" onchange="renderUsageSummary()">
+                </div>
+                <div class="form-group">
+                    <label>結束日期</label>
+                    <input type="date" id="usageEndDate" onchange="renderUsageSummary()">
+                </div>
+            </div>
+            <table id="usageTable">
+                <thead>
+                    <tr>
+                        <th>供應商</th>
+                        <th>項目</th>
+                        <th>總張數</th>
+                        <th>未使用剩餘數量</th>
+                    </tr>
+                </thead>
+                <tbody id="usageBody">
+                    <tr><td colspan="4" style="color: #86868b;">請選擇日期區間進行篩選</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
@@ -264,6 +292,7 @@
         showLoading();
         allLogs = await (await fetch(API_URL + "?action=getLogs")).json();
         renderLogs();
+        renderUsageSummary(); // 同步刷新使用量統計頁面
         hideLoading();
     }
 
@@ -396,6 +425,69 @@
         });
     }
 
+    // 全新增加功能：使用量總數動態統計與日期區間篩選邏輯
+    function renderUsageSummary() {
+        var startInput = document.getElementById('usageStartDate').value;
+        var endInput = document.getElementById('usageEndDate').value;
+        var usageBody = document.getElementById('usageBody');
+
+        if (!startInput || !endInput) {
+            usageBody.innerHTML = '<tr><td colspan="4" style="color: #86868b;">請選擇日期區間進行篩選</td></tr>';
+            return;
+        }
+
+        var startTime = new Date(startInput + "T00:00:00").getTime();
+        var endTime = new Date(endInput + "T23:59:59").getTime();
+        var usageGroups = {};
+
+        allLogs.forEach(function(l) {
+            var isDeleted = l.data[12] === "已登記刪除";
+            if (isDeleted) return;
+
+            var sup = l.data[1];
+            var gift = l.data[2];
+            var status = l.data[6]; // '未使用' 或 '已使用'
+            var useTime1 = l.data[8] ? new Date(l.data[8]).getTime() : 0;
+            var useTime2 = l.data[10] ? new Date(l.data[10]).getTime() : 0;
+
+            if (!sup || !gift) return;
+            var key = sup + "|||" + gift;
+
+            if (!usageGroups[key]) {
+                usageGroups[key] = { supplier: sup, gift: gift, totalUsedInPeriod: 0, totalUnusedAbsolute: 0 };
+            }
+
+            // 1. 統計區間內的使用總張數 (只要其中一次使用時間落在區間內即算數)
+            if (status === "已使用") {
+                var inPeriod = false;
+                if (useTime1 >= startTime && useTime1 <= endTime) inPeriod = true;
+                if (useTime2 >= startTime && useTime2 <= endTime) inPeriod = true;
+                if (inPeriod) {
+                    usageGroups[key].totalUsedInPeriod++;
+                }
+            }
+
+            // 2. 統計目前絕對未使用的剩餘數量 (不限時間，屬於當下真正的剩餘庫存數)
+            if (status === "未使用") {
+                usageGroups[key].totalUnusedAbsolute++;
+            }
+        });
+
+        usageBody.innerHTML = "";
+        var keys = Object.keys(usageGroups);
+        if (keys.length === 0) {
+            usageBody.innerHTML = '<tr><td colspan="4" style="color: #86868b;">此區間內無使用數據</td></tr>';
+            return;
+        }
+
+        keys.forEach(function(key) {
+            var g = usageGroups[key];
+            var tr = document.createElement('tr');
+            tr.innerHTML = "<td>" + g.supplier + "</td><td>" + g.gift + "</td><td>" + g.totalUsedInPeriod + "</td><td>" + g.totalUnusedAbsolute + "</td>";
+            usageBody.appendChild(tr);
+        });
+    }
+
     async function activateSelectedList(codes) {
         if(!codes || codes.length === 0) return;
         if (!confirm("您確定要啟用這批共 " + codes.length + " 筆禮券嗎？")) return;
@@ -452,7 +544,7 @@
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
         document.getElementById('nav-' + p).classList.add('active');
         
-        if(p === 'recordsPage') loadLogs();
+        if(p === 'recordsPage' || p === 'usagePage') loadLogs();
     }
 
     function showSubLog(type) {
