@@ -14,6 +14,11 @@
         button:disabled { background: #ccc; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        td input { width: 100%; padding: 4px; border: none; background: transparent; }
+        td input:disabled { background: #eee; }
+        .edit-btn { background: #ff9500; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+        .save-btn { background: #28a745; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+        .del-btn { background: #ff3b30; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -61,22 +66,15 @@
 
     <div id="logs" class="content">
         <h2>流水帳記錄</h2>
-        <input type="text" id="filterOrder" placeholder="篩選單號" oninput="renderLogs()">
-        <input type="text" id="filterUser" placeholder="篩選人員" oninput="renderLogs()">
-        <input type="date" id="filterDate" oninput="renderLogs()">
-        <input type="text" id="filterItem" placeholder="篩選項目" oninput="renderLogs()">
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="filterOrder" placeholder="篩選單號" oninput="renderLogs()">
+            <input type="date" id="filterDate" oninput="renderLogs()">
+            <input type="text" id="filterUser" placeholder="篩選人員" oninput="renderLogs()">
+        </div>
         <table>
             <thead>
                 <tr>
-                    <th>時間</th>
-                    <th>供應商</th>
-                    <th>項目</th>
-                    <th>首碼</th>
-                    <th>尾碼</th>
-                    <th>數量</th>
-                    <th>人員</th>
-                    <th>單號</th>
-                    <th>操作</th>
+                    <th>時間</th><th>供應商</th><th>項目</th><th>首碼</th><th>尾碼</th><th>數量</th><th>人員</th><th>單號</th><th>操作</th>
                 </tr>
             </thead>
             <tbody id="logBody"></tbody>
@@ -108,13 +106,11 @@
 
         function renderLogs() {
             var fO = document.getElementById('filterOrder').value;
-            var fU = document.getElementById('filterUser').value;
             var fD = document.getElementById('filterDate').value;
-            var fI = document.getElementById('filterItem').value;
+            var fU = document.getElementById('filterUser').value;
             var filtered = allLogs.filter(function(l) {
-                return (l.data[6]||"").toString().includes(fO) && 
+                return l.data[6].toString().includes(fO) && 
                        (l.data[8]||"").toString().includes(fU) && 
-                       (l.data[2]||"").toString().includes(fI) && 
                        (!fD || new Date(l.data[7]).toISOString().split('T')[0] === fD);
             });
             filtered.sort(function(a, b) { return new Date(b.data[7]) - new Date(a.data[7]); });
@@ -124,27 +120,38 @@
             var body = document.getElementById('logBody');
             body.innerHTML = "";
             
-            pageData.forEach(function(l) {
+            pageData.forEach(function(l, i) {
                 var tr = document.createElement('tr');
-                var code = l.data[3].toString();
-                var head = code.length > 6 ? code.substring(0, 6) : code;
-                var tail = code.length > 6 ? code.substring(code.length - 6) : "";
-                
+                var isDel = (l.data[8] === "已登記刪除");
                 tr.innerHTML = "<td>" + new Date(l.data[7]).toLocaleString() + "</td>" +
-                               "<td>" + l.data[1] + "</td>" +
-                               "<td>" + l.data[2] + "</td>" +
-                               "<td>" + head + "</td>" +
-                               "<td>" + tail + "</td>" +
-                               "<td>1</td>" +
-                               "<td>" + (l.data[8] || "") + "</td>" +
-                               "<td>" + (l.data[6] || "") + "</td>" +
-                               "<td><button onclick='editLog(\"" + l.sheet + "\", " + l.row + ")'>編</button>" +
-                                   "<button onclick='delLog(\"" + l.sheet + "\", " + l.row + ")'>刪</button></td>";
+                    "<td><input type='text' class='edit-in-"+i+"' value='"+l.data[1]+"' disabled></td>" +
+                    "<td><input type='text' class='edit-in-"+i+"' value='"+l.data[2]+"' disabled></td>" +
+                    "<td><input type='text' class='edit-in-"+i+"' value='"+l.data[3].substring(0,6)+"' disabled></td>" +
+                    "<td><input type='text' class='edit-in-"+i+"' value='"+l.data[3].substring(l.data[3].length-6)+"' disabled></td>" +
+                    "<td>1</td>" +
+                    "<td>" + (l.data[8] || "") + "</td>" +
+                    "<td><input type='text' class='edit-in-"+i+"' value='"+(l.data[6] || "")+"' disabled></td>" +
+                    "<td>" + (!isDel ? "<button class='edit-btn' id='e"+i+"' onclick='toggleEdit("+i+")'>編</button>" +
+                    "<button class='save-btn' id='s"+i+"' style='display:none' onclick='saveRow("+i+", \""+l.sheet+"\", "+l.row+")'>存</button>" +
+                    "<button class='del-btn' onclick='delLog(\""+l.sheet+"\", "+l.row+")'>刪</button>" : "已刪除") + "</td>";
                 body.appendChild(tr);
             });
             document.getElementById('pagination').innerHTML = "頁碼: " + curPage + 
                 " <button onclick='curPage=Math.max(1, curPage-1); renderLogs()'>上一頁</button>" +
                 " <button onclick='curPage++; renderLogs()'>下一頁</button>";
+        }
+
+        function toggleEdit(i) {
+            document.querySelectorAll('.edit-in-'+i).forEach(function(e){ e.disabled = false; });
+            document.getElementById('e'+i).style.display = 'none';
+            document.getElementById('s'+i).style.display = 'inline-block';
+        }
+
+        async function saveRow(i, s, r) {
+            var inputs = document.querySelectorAll('.edit-in-'+i);
+            var n = inputs[4].value; // 單號
+            await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'edit', sheet: s, row: r, newOrderNo: n}) });
+            loadLogs();
         }
 
         async function delLog(s, r) {
@@ -154,74 +161,15 @@
             }
         }
 
-        async function editLog(s, r) {
-            var n = prompt("修改單號 (格式: 供應商,項目,編號,人員,單號):");
-            if(n) {
-                await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'edit', sheet: s, row: r, data: n}) });
-                loadLogs();
-            }
-        }
-
-        function toggleMode(p, m) {
-            document.getElementById(p + 'List').style.display = (m === 'list') ? 'block' : 'none';
-            document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none';
-        }
-
-        function applySuffixLogic(val, type) {
-            var s = val.toString().trim();
-            if (type === "suffix_12") return s.slice(-12);
-            if (type === "suffix_1") return s.slice(0, -1);
-            if (type === "suffix_2") return s.slice(0, -2);
-            return s;
-        }
-
-        function getRangeCodes(start, end) {
-            var sVal = parseInt(start.slice(-12)), eVal = parseInt(end.slice(-12)), prefix = start.slice(0, -12);
-            var codes = [];
-            for (var i = sVal; i <= eVal; i++) { codes.push(prefix + i.toString().padStart(12, '0')); }
-            return codes;
-        }
-
-        async function register() {
-            var btn = document.getElementById('regBtn'); btn.innerText = "處理中..."; btn.disabled = true;
-            var s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect').value;
-            var codes = (document.getElementById('regMode').value === 'list') ? document.getElementById('regCodes').value.trim().split('\n') : getRangeCodes(document.getElementById('regStart').value.trim(), document.getElementById('regEnd').value.trim());
-            var res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: codes.map(function(c){ return {Batch: currentBatch, Supplier: s, GiftName: g, Code: c.toString()}; })}) })).json();
-            alert(res.result === "success" ? "登記完成！成功新增 " + res.count + " 筆。" : "錯誤: " + res.message); location.reload();
-        }
-
-        async function useGift(confirmed) {
-            var btn = document.getElementById('useBtn'); btn.innerText = "處理中...";
-            var s = document.getElementById('useStart').value.trim(), e = document.getElementById('useEnd').value.trim();
-            var codes = (document.getElementById('useMode').value === 'list') ? document.getElementById('useCodes').value.trim().split('\n') : getRangeCodes(s, e);
-            var res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', confirm: confirmed, Supplier: window.foundData.supplier, GiftName: window.foundData.gift, payload: codes.map(function(c){ return {Code: applySuffixLogic(c, window.foundData.calcType), OrderNo: document.getElementById('orderNo').value}; })}) })).json();
-            btn.innerText = "確認批量使用";
-            if (res.result === "error") alert(res.message); else if (res.result === "confirm") { if(confirm(res.message)) useGift(true); } else { alert("處理完成！"); location.reload(); }
-        }
-
+        function toggleMode(p, m) { document.getElementById(p + 'List').style.display = (m === 'list') ? 'block' : 'none'; document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none'; }
+        function applySuffixLogic(val, type) { var s = val.toString().trim(); if (type === "suffix_12") return s.slice(-12); if (type === "suffix_1") return s.slice(0, -1); if (type === "suffix_2") return s.slice(0, -2); return s; }
+        function getRangeCodes(start, end) { var sVal = parseInt(start.slice(-12)), eVal = parseInt(end.slice(-12)), prefix = start.slice(0, -12); var codes = []; for (var i = sVal; i <= eVal; i++) { codes.push(prefix + i.toString().padStart(12, '0')); } return codes; }
+        async function register() { var btn = document.getElementById('regBtn'); btn.innerText = "處理中..."; btn.disabled = true; var s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect').value; var codes = (document.getElementById('regMode').value === 'list') ? document.getElementById('regCodes').value.trim().split('\n') : getRangeCodes(document.getElementById('regStart').value.trim(), document.getElementById('regEnd').value.trim()); var res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'register', payload: codes.map(function(c){ return {Batch: currentBatch, Supplier: s, GiftName: g, Code: c.toString()}; })}) })).json(); alert(res.result === "success" ? "登記完成！成功新增 " + res.count + " 筆。" : "錯誤: " + res.message); location.reload(); }
+        async function useGift(confirmed) { var btn = document.getElementById('useBtn'); btn.innerText = "處理中..."; var s = document.getElementById('useStart').value.trim(), e = document.getElementById('useEnd').value.trim(); var codes = (document.getElementById('useMode').value === 'list') ? document.getElementById('useCodes').value.trim().split('\n') : getRangeCodes(s, e); var res = await (await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'use', confirm: confirmed, Supplier: window.foundData.supplier, GiftName: window.foundData.gift, payload: codes.map(function(c){ return {Code: applySuffixLogic(c, window.foundData.calcType), OrderNo: document.getElementById('orderNo').value}; })}) })).json(); btn.innerText = "確認批量使用"; if (res.result === "error") alert(res.message); else if (res.result === "confirm") { if(confirm(res.message)) useGift(true); } else { alert("處理完成！"); location.reload(); } }
         function calcTotal(id, target) { document.getElementById(target).innerText = "總張數: " + document.getElementById(id).value.trim().split('\n').filter(Boolean).length; }
-
-        function calcTotalRange(p) {
-            var s = document.getElementById(p + 'Start').value.trim(), e = document.getElementById(p + 'End').value.trim();
-            var type = (window.foundData && window.foundData.calcType) ? window.foundData.calcType : null;
-            var sV = parseInt(applySuffixLogic(s, type)), eV = parseInt(applySuffixLogic(e, type));
-            document.getElementById(p + 'Total').innerText = "總張數: " + (sV && eV ? (eV - sV + 1) : 0);
-        }
-
-        function handleSingleCheck(val) {
-            var code = document.getElementById('useMode').value === 'list' ? val.trim().split('\n')[0] : document.getElementById('useStart').value.trim();
-            if(!code) return;
-            fetch(API_URL + "?action=find&code=" + encodeURIComponent(code)).then(function(r){ return r.json(); }).then(function(res){
-                window.foundData = res; document.getElementById('useInfoDisplay').innerText = res.found ? "偵測到：" + res.supplier + " - " + res.gift : "找不到";
-                document.getElementById('useBtn').disabled = !res.found; calcTotalRange('use');
-            });
-        }
-
-        function updateGiftMenu() {
-            var s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect'); g.innerHTML = "";
-            configData.filter(function(r){ return r[0] === s; }).forEach(function(r){ var opt = document.createElement('option'); opt.value = r[1]; opt.text = r[1]; g.appendChild(opt); });
-        }
-
+        function calcTotalRange(p) { var s = document.getElementById(p + 'Start').value.trim(), e = document.getElementById(p + 'End').value.trim(); var type = (window.foundData && window.foundData.calcType) ? window.foundData.calcType : null; var sV = parseInt(applySuffixLogic(s, type)), eV = parseInt(applySuffixLogic(e, type)); document.getElementById(p + 'Total').innerText = "總張數: " + (sV && eV ? (eV - sV + 1) : 0); }
+        function handleSingleCheck(val) { var code = document.getElementById('useMode').value === 'list' ? val.trim().split('\n')[0] : document.getElementById('useStart').value.trim(); if(!code) return; fetch(API_URL + "?action=find&code=" + encodeURIComponent(code)).then(function(r){ return r.json(); }).then(function(res){ window.foundData = res; document.getElementById('useInfoDisplay').innerText = res.found ? "偵測到：" + res.supplier + " - " + res.gift : "找不到"; document.getElementById('useBtn').disabled = !res.found; calcTotalRange('use'); }); }
+        function updateGiftMenu() { var s = document.getElementById('supplierSelect').value, g = document.getElementById('giftSelect'); g.innerHTML = ""; configData.filter(function(r){ return r[0] === s; }).forEach(function(r){ var opt = document.createElement('option'); opt.value = r[1]; opt.text = r[1]; g.appendChild(opt); }); }
         function showTab(id) { document.querySelectorAll('.content').forEach(function(c){ c.classList.remove('active'); }); document.getElementById(id).classList.add('active'); }
     </script>
 </body>
