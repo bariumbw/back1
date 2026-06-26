@@ -142,9 +142,10 @@
                 return passOrder && passUser && passDate && (l.data[11] !== "已登記刪除");
             });
 
-            // --- 1. 處理禮券登記記錄 ---
+            // --- 1. 處理禮券登記記錄 (修正：排除已使用狀態) ---
             var regGroups = {};
             filteredLogs.forEach(function(l) {
+                if (l.data[5] === "已使用") return; // 排除已使用的部分，避免錯置
                 var batchId = l.data[0];
                 if (!batchId) return;
                 if (!regGroups[batchId]) {
@@ -173,12 +174,12 @@
                 regLogBody.appendChild(tr);
             });
 
-            // --- 2. 處理禮券使用記錄 ---
+            // --- 2. 處理禮券使用記錄 (修正：必須為已使用狀態) ---
             var useGroups = {};
             filteredLogs.forEach(function(l) {
                 var useOrder = l.data[6];
                 var useTime = l.data[9];
-                if (!useOrder || l.data[5] !== "已使用") return;
+                if (l.data[5] !== "已使用" || !useOrder) return; // 確保只有已使用的才進入使用記錄
                 var groupKey = useOrder + "_" + useTime;
                 if (!useGroups[groupKey]) {
                     useGroups[groupKey] = { supplier: l.data[1], gift: l.data[2], codes: [], orderNo: useOrder, time: useTime };
