@@ -139,7 +139,7 @@
                 <input type="date" id="filterDate" oninput="renderLogs()">
                 <input type="text" id="filterUser" placeholder="篩選人員" oninput="renderLogs()">
                 <select id="filterActiveStatus" onchange="renderLogs()">
-                    <option value="all" selected>全部顯示 (啟用狀態)</option>
+                    <option value="all" selected>全部顯示</option>
                     <option value="unactivated">未啟用</option>
                     <option value="activated">已啟用</option>
                 </select>
@@ -388,7 +388,7 @@
         var fO = document.getElementById('filterOrder').value;
         var fD = document.getElementById('filterDate').value;
         var fU = document.getElementById('filterUser').value;
-        var fA = document.getElementById('filterActiveStatus').value; // 獲取啟用篩選狀態
+        var fA = document.getElementById('filterActiveStatus').value; // 獲取狀態篩選值
 
         var baseLogs = allLogs.filter(function(l) {
             var passUser = !fU || (l.data[11] || "").toString().includes(fU);
@@ -454,6 +454,7 @@
             
             // 只有真正進入「已使用」狀態的卡號才可以進來收集顯示
             if (status === "已使用") {
+                // 找出這次點擊確認批量使用動作的實際單號與時間
                 var actualOrder = useOrder || useOrder2 || "無單號";
                 var actualTime = useTime || useTime2 || "無時間";
 
@@ -469,7 +470,7 @@
                         orderNo2: useOrder2 ? useOrder2 : "-",
                         timeStr2: useTime2 ? new Date(useTime2).toLocaleString() : "-",
                         activationStatuses: [],
-                        sortTimestamp: actualTime ? new Date(actualTime).getTime() : 0 
+                        sortTimestamp: actualTime ? new Date(actualTime).getTime() : 0 // 用於最新排序
                     };
                 }
                 
@@ -481,26 +482,27 @@
         var useLogBody = document.getElementById('useLogBody');
         useLogBody.innerHTML = "";
         
-        // 1) 排序：按批量使用時間由新到舊排序 (最新使用的排最上方)
+        // 1) 排序：按批量確認使用時間由新到舊排序 (最新使用的排最上方)
         Object.keys(useGroups).sort(function(a, b) {
             return useGroups[b].sortTimestamp - useGroups[a].sortTimestamp;
         }).forEach(function(key) {
             var g = useGroups[key];
             if (g.codes.length === 0) return;
 
+            // 分析該批次內是否有未啟動或已啟動的項目
             var hasUnactivated = g.activationStatuses.indexOf("未啟動") !== -1;
-            var hasActivated = g.activationStatuses.indexOf("已啟動") !== -1;
 
-            // 2) 篩選加入：根據未啟用 / 已啟用條件過濾資料行為
+            // 2) 狀態過濾條件判斷
             if (fA === "unactivated" && !hasUnactivated) {
-                return; // 有啟動按鈕的都屬於未啟用，如果不含未啟動則略過
+                return; // 如果選取「未啟用」，但這批卡片全都是已啟動狀態（沒有啟動按鈕），則排除
             }
             if (fA === "activated" && hasUnactivated) {
-                return; // 只要有未啟動的就算未啟用，故含有未啟動者不屬於完全已啟用，略過
+                return; // 如果選取「已啟用」，但這批卡片裡包含任何未啟動項目（即還有啟動按鈕），則排除
             }
 
             var total = g.codes.length;
             var codeStr = formatAllCodesToRanges(g.codes);
+            var hasActivated = g.activationStatuses.indexOf("已啟動") !== -1;
             var actTdContent = "";
             
             var targetUnactivatedCodes = [];
