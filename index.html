@@ -21,6 +21,7 @@
         .edit-btn { background: #ff9500; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         .save-btn { background: #28a745; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         .del-btn { background: #ff3b30; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+        .act-row-btn { background: #007bc2; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
         .log-section { display: none; background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 8px; margin-top: 15px; }
         .log-section.active { display: block; }
         .refresh-btn { padding: 10px 15px; background: #007bc2; color: white; border: none; cursor: pointer; height: 42px; align-self: center; margin-bottom: 20px;}
@@ -119,7 +120,7 @@
             <table>
                 <thead>
                     <tr>
-                        <th>清單/範圍</th><th>Code 範圍/內容</th><th>總張數</th><th>供應商</th><th>項目</th><th>單號</th><th>時間</th><th>單號2</th><th>時間2</th>
+                        <th>清單/範圍</th><th>Code 範圍/內容</th><th>總張數</th><th>供應商</th><th>項目</th><th>單號</th><th>時間</th><th>單號2</th><th>時間2</th><th>啟用</th>
                     </tr>
                 </thead>
                 <tbody id="useLogBody"></tbody>
@@ -254,7 +255,8 @@
             // --- 2. 處理禮券使用記錄 ---
             var useGroups = {};
             baseLogs.forEach(function(l) {
-                var status = l.data[6];
+                var isActivated = l.data[5]; // 欄位 5: 啟動狀態
+                var status = l.data[6];      // 欄位 6: 使用狀態
                 var useOrder = l.data[7] || "";   
                 var useTime = l.data[8] || "";    
                 var useOrder2 = l.data[9] || "";  
@@ -279,7 +281,8 @@
                         orderNo: useOrder, 
                         time: useTime,
                         orderNo2: useOrder2,
-                        time2: useTime2
+                        time2: useTime2,
+                        isActivatedStatus: isActivated // 記錄當前啟動狀態
                     };
                 }
                 useGroups[groupKey].codes.push(l.data[4].toString()); 
@@ -298,6 +301,16 @@
                 var t1 = g.time ? new Date(g.time).toLocaleString() : "";
                 var t2 = g.time2 ? new Date(g.time2).toLocaleString() : "";
 
+                // 修正點：依照範例格式渲染表格，並動態判斷是否需要出現「啟用按鈕」
+                var actTdContent = "";
+                if (g.isActivatedStatus === "未啟動") {
+                    // 轉義代碼清單，供按鈕事件點擊呼叫
+                    var codeJsonStr = JSON.stringify(g.codes).replace(/"/g, '&quot;');
+                    actTdContent = "<button class='act-row-btn' onclick='activateSelectedList(" + codeJsonStr + ")'>啟用</button>";
+                } else {
+                    actTdContent = "<span style='color:green;'>已啟用</span>";
+                }
+
                 var tr = document.createElement('tr');
                 tr.innerHTML = "<td>" + mode + "</td>" +
                                "<td>" + codeStr + "</td>" +
@@ -307,7 +320,8 @@
                                "<td>" + g.orderNo + "</td>" +
                                "<td>" + t1 + "</td>" +
                                "<td>" + g.orderNo2 + "</td>" +
-                               "<td>" + t2 + "</td>";
+                               "<td>" + t2 + "</td>" +
+                               "<td>" + actTdContent + "</td>"; // 渲染新增的啟用欄位
                 useLogBody.appendChild(tr);
             });
 
@@ -341,35 +355,50 @@
             });
         }
 
-        // 修正點：落實已使用未啟用 Code 點擊啟用時的「雙重彈窗確認」邏輯
+        // 修正點：專供明細列表中「已使用未啟用」Code 點擊時觸發的「雙重彈窗確認」啟用函式
+        async function activateSelectedList(codes) {
+            if(!codes || codes.length === 0) return;
+
+            // 第一次彈出確認
+            if (!confirm("您確定要啟用這批共 " + codes.length + " 筆禮券嗎？")) return;
+            // 第二次再次彈出確認 (已使用未啟用 - 彈出再次確認啟用)
+            if (!confirm("❗系統安全核對：確認要將此批『已使用未啟用』的禮券狀態變更為「已啟動」嗎？")) return;
+
+            await executeActivation(codes);
+        }
+
+        // 表單頁籤手動啟用的函式 (同樣保留雙重確認結構)
         async function activateGift() {
             var m = document.getElementById('actMode').value;
             var codes = (m === 'list') ? document.getElementById('actCodes').value.trim().split('\n') : getRangeCodes(document.getElementById('actStart').value.trim(), document.getElementById('actEnd').value.trim());
             if(codes.length === 0 || !codes[0]) { alert("請輸入有效的代碼範圍或清單！"); return; }
 
-            // 第一次彈出確認
             if (!confirm("您確定要啟用這批共 " + codes.length + " 筆禮券嗎？")) return;
-            // 修正點：第二次強制再次彈出確認，特別針對「已使用未啟用」進行核對
-            if (!confirm("❗安全警示：您即將變更『已使用未啟用』代碼之啟動狀態。確定請按 [確定] 繼續執行")) return;
+            if (!confirm("❗系統安全核對：確認要將此批『已使用未啟用』的禮券狀態變更為「已啟動」嗎？")) return;
 
             var btn = document.getElementById('actBtn');
             btn.innerText = "啟用處理中...";
             btn.disabled = true;
 
-            var res = await (await fetch(API_URL, {
-                method: "POST",
-                body: JSON.stringify({ mode: 'activate', payload: codes })
-            })).json();
+            await executeActivation(codes);
 
             btn.innerText = "確認點擊啟用";
             btn.disabled = false;
+            document.getElementById('actStart').value = "";
+            document.getElementById('actEnd').value = "";
+            document.getElementById('actCodes').value = "";
+            document.getElementById('actTotal').innerText = "總張數: 0";
+        }
+
+        // 核心執行遠端啟用的通用封裝請求
+        async function executeActivation(codesList) {
+            var res = await (await fetch(API_URL, {
+                method: "POST",
+                body: JSON.stringify({ mode: 'activate', payload: codesList })
+            })).json();
 
             if(res.result === "success") {
                 alert("啟用成功！已將 " + res.count + " 筆禮券變更為已啟動狀態。");
-                document.getElementById('actStart').value = "";
-                document.getElementById('actEnd').value = "";
-                document.getElementById('actCodes').value = "";
-                document.getElementById('actTotal').innerText = "總張數: 0";
                 loadLogs();
             } else {
                 alert("更新失敗：" + res.message);
