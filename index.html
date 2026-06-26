@@ -43,7 +43,6 @@
 <div id="toast">存檔成功！</div>
 
 <div class="container">
-    <!-- 系統驗證登入頁面 -->
     <div id="loginPage" class="page active">
         <h2>禮券系統驗證</h2>
         <div class="form-group"><label>Email</label><input type="email" id="loginEmail"></div>
@@ -51,7 +50,6 @@
         <button onclick="handleLogin()" style="width:100%;">登入系統</button>
     </div>
 
-    <!-- 主程式功能應用頁面 (登入成功後顯示) -->
     <div id="appPage" class="page">
         <nav style="margin-bottom:20px; display:flex; gap:10px; flex-wrap: wrap;">
             <button id="nav-regPage" class="nav-btn active" onclick="switchPage('regPage')">禮券登記</button>
@@ -61,7 +59,6 @@
             <button id="nav-usagePage" class="nav-btn" onclick="switchPage('usagePage')">使用量總數</button>
         </nav>
 
-        <!-- 頁面 1: 禮券登記 -->
         <div id="regPage" class="page active">
             <h2>禮券登記 (Batch: <span id="batchDisplay">讀取中...</span>)</h2>
             <div class="reg-grid">
@@ -91,7 +88,6 @@
             <button id="regBtn" onclick="register(false)" style="width:100%; padding: 12px;">確認登記</button>
         </div>
 
-        <!-- 頁面 2: 禮券啟用管理 -->
         <div id="actPage" class="page">
             <h2>禮券啟用管理 (已使用未啟用)</h2>
             <div class="form-group">
@@ -113,7 +109,6 @@
             <button id="actBtn" onclick="activateGift()" style="width:100%; padding: 12px; background: #0071e3;">確認點擊啟用</button>
         </div>
 
-        <!-- 頁面 3: 禮券使用 -->
         <div id="usePage" class="page">
             <h2>禮券使用</h2>
             <div class="form-group">
@@ -137,28 +132,25 @@
             <button id="useBtn" onclick="useGift(false)" style="width:100%; padding: 12px;" disabled>確認批量使用</button>
         </div>
 
-        <!-- 頁面 4: 流水帳記錄 -->
         <div id="recordsPage" class="page">
             <h2>流水帳記錄 <button onclick="loadLogs()" style="font-size:12px; background: #6c757d;">重新整理</button></h2>
             <div style="background:#f9f9f9; padding:15px; border-radius:8px; margin-bottom:15px; display:grid; grid-template-columns: repeat(4, 1fr); gap:10px;">
                 <input type="text" id="filterOrder" placeholder="篩選單號" oninput="renderLogs()">
                 <input type="date" id="filterDate" oninput="renderLogs()">
                 <input type="text" id="filterUser" placeholder="篩選人員" oninput="renderLogs()">
-                <select id="filterActiveStatus" onchange="renderLogs()">
-                    <option value="all" selected>全部顯示</option>
-                    <option value="unactivated">未啟用</option>
-                    <option value="activated">已啟用</option>
+                <select id="filterStatus" oninput="renderLogs()">
+                    <option value="">全部狀態</option>
+                    <option value="未啟用">未啟用 (含啟動按鈕)</option>
+                    <option value="已啟用">已啟用</option>
                 </select>
             </div>
 
-            <!-- 子記錄分頁切換按鈕 -->
             <div style="margin-bottom: 15px;">
                 <button id="sub-btn-reg" class="sub-tab-btn active" onclick="showSubLog('reg')">禮券登記記錄</button>
                 <button id="sub-btn-use" class="sub-tab-btn" onclick="showSubLog('use')">禮券使用記錄</button>
                 <button id="sub-btn-sum" class="sub-tab-btn" onclick="showSubLog('sum')">庫存剩餘數量統計</button>
             </div>
 
-            <!-- 子功能區塊 1: 禮券登記記錄 -->
             <div id="log-section-reg" class="log-section active">
                 <h3>禮券登記記錄 (按每次確認顯示)</h3>
                 <table>
@@ -171,7 +163,6 @@
                 </table>
             </div>
 
-            <!-- 子功能區塊 2: 禮券使用記錄 -->
             <div id="log-section-use" class="log-section">
                 <h3>禮券使用記錄 (按每次確認顯示)</h3>
                 <table>
@@ -184,7 +175,6 @@
                 </table>
             </div>
 
-            <!-- 子功能區塊 3: 庫存剩餘數量統計 -->
             <div id="log-section-sum" class="log-section">
                 <h3>所有禮券剩餘庫存統計表</h3>
                 <table>
@@ -198,7 +188,6 @@
             </div>
         </div>
 
-        <!-- 頁面 5: 使用量總數 -->
         <div id="usagePage" class="page">
             <h2>使用量總數</h2>
             <div style="background:#f9f9f9; padding:15px; border-radius:8px; margin-bottom:15px; display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
@@ -399,7 +388,7 @@
         var fO = document.getElementById('filterOrder').value;
         var fD = document.getElementById('filterDate').value;
         var fU = document.getElementById('filterUser').value;
-        var fA = document.getElementById('filterActiveStatus').value; 
+        var fS = document.getElementById('filterStatus').value; // 抓取狀態篩選值
 
         var baseLogs = allLogs.filter(function(l) {
             var passUser = !fU || (l.data[11] || "").toString().includes(fU);
@@ -441,10 +430,9 @@
             regLogBody.appendChild(tr);
         });
 
-        // --- 2. 處理禮券使用記錄 (完美恢復：按每次點擊確認批量使用動作，一組一組顯示，並支援依時間新舊排序) ---
+        // --- 2. 處理禮券使用記錄 ---
         var useGroups = {};
         baseLogs.forEach(function(l) {
-            var batchId = l.data[0] || ""; 
             var supplier = l.data[1];
             var giftName = l.data[2];
             var isActivated = l.data[5]; 
@@ -467,8 +455,7 @@
                 var actualOrder = useOrder || useOrder2 || "無單號";
                 var actualTime = useTime || useTime2 || "無時間";
 
-                // 【恢復關鍵核心】：建立聯合主鍵 groupKey 確保每次確認動作獨立聚合為一組
-                var groupKey = batchId + "_" + actualOrder + "_" + actualTime + "_" + supplier + "_" + giftName;
+                var groupKey = actualOrder + "_" + actualTime + "_" + supplier + "_" + giftName;
 
                 if (!useGroups[groupKey]) {
                     useGroups[groupKey] = { 
@@ -492,7 +479,7 @@
         var useLogBody = document.getElementById('useLogBody');
         useLogBody.innerHTML = "";
         
-        // 排序：以「整組確認的時間戳」進行由新到舊排序，絕不拆開一組組的結構
+        // 核心修正 1：完美依照最新使用時間（sortTimestamp）由新到舊排序
         Object.keys(useGroups).sort(function(a, b) {
             return useGroups[b].sortTimestamp - useGroups[a].sortTimestamp;
         }).forEach(function(key) {
@@ -500,13 +487,18 @@
             if (g.codes.length === 0) return;
 
             var hasUnactivated = g.activationStatuses.indexOf("未啟動") !== -1;
+            var hasActivated = g.activationStatuses.indexOf("已啟動") !== -1;
 
-            if (fA === "unactivated" && !hasUnactivated) return;
-            if (fA === "activated" && hasUnactivated) return;
+            // 核心修正 2：加入啟用狀態控制與篩選判斷
+            // 有啟動按鈕的項目（包含全數未啟用、或部分未啟用）皆屬於「未啟用」
+            var isGroupUnactivated = hasUnactivated; // 只要有任何一筆未啟動，就是未啟用狀態（會出現啟動按鈕）
+            var isGroupFullyActivated = !hasUnactivated && hasActivated; // 全數已啟動，不含任何啟動按鈕
+
+            if (fS === "未啟用" && !isGroupUnactivated) return;
+            if (fS === "已啟用" && !isGroupFullyActivated) return;
 
             var total = g.codes.length;
             var codeStr = formatAllCodesToRanges(g.codes);
-            var hasActivated = g.activationStatuses.indexOf("已啟動") !== -1;
             var actTdContent = "";
             
             var targetUnactivatedCodes = [];
