@@ -296,7 +296,7 @@
         hideLoading();
     }
 
-    // 精確分析「未啟用」卡號區間並拼湊成指定格式化文字：(部分未啟動)xxxx,xxxx-xxxx未啟用
+    // 分析未啟用卡號清單，嚴格根據您的範例格式：(部分未啟動)52505500832,52505500835,52505500837-52505500890未啟用
     function formatUnactivatedDetails(codes, statuses) {
         var unactivatedCodes = [];
         for (var i = 0; i < codes.length; i++) {
@@ -339,7 +339,6 @@
             parts.push(startObj.raw + "-" + prevObj.raw);
         }
 
-        // 回傳完全符合您指定樣式的括號與文字尾綴
         return "(部分未啟動)" + parts.join(",") + "未啟用";
     }
 
@@ -409,7 +408,7 @@
                 if (logDate !== fD && logDate2 !== fD) return;
             }
             
-            // 【最核心修正】：群組 Key 納入每次點確認點擊的使用時間戳記(useTime/useTime2)，達成依據每次點擊確認分開顯示、不合併
+            // 依據每次確認點擊的時間戳記(useTime/useTime2)做核心群組，確保按確認次數分開顯示、絕不合併不同操作
             var groupKey = l.data[1] + "_" + l.data[2] + "_" + useOrder + "_" + useTime + "_" + useOrder2 + "_" + useTime2;
             if (!useGroups[groupKey]) {
                 useGroups[groupKey] = { 
@@ -450,13 +449,17 @@
             var actTdContent = "";
             var codeJsonStr = JSON.stringify(g.codes).replace(/"/g, '&quot;');
 
-            // 完美的格式判定：依據點擊區分後，若該次確認中包含部分未啟動
+            // 【最新修正與符合規則】：一組號碼內，若部分未啟動且部分已啟用
             if (hasUnactivated && hasActivated) {
                 var detailStr = formatUnactivatedDetails(g.codes, g.activationStatuses);
-                actTdContent = "<span style='color:orange; font-weight:600;'>" + detailStr + "</span><br><button class='act-row-btn' style='margin-top:4px;' onclick='activateSelectedList(" + codeJsonStr + ")'>啟用</button>";
+                actTdContent = "<span style='color:green; font-weight:600;'>已啟用</span><br>" + 
+                               "<span style='color:orange; font-weight:600; display:block; margin-top:4px;'>" + detailStr + "</span>" +
+                               "<button class='act-row-btn' style='margin-top:4px;' onclick='activateSelectedList(" + codeJsonStr + ")'>啟用</button>";
             } else if (hasUnactivated) {
+                // 全數為未啟動
                 actTdContent = "<span style='color:red;'>未啟用</span><br><button class='act-row-btn' style='margin-top:4px;' onclick='activateSelectedList(" + codeJsonStr + ")'>啟用</button>";
             } else {
+                // 全數為已啟用
                 actTdContent = "<span style='color:green; font-weight:600;'>已啟用</span>";
             }
 
