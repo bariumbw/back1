@@ -12,13 +12,14 @@
         input, select, textarea { padding: 10px; margin: 10px 0; width: 100%; max-width: 300px; display: block; }
         button { padding: 12px; background: #4CAF50; color: white; border: none; cursor: pointer; }
         button:disabled { background: #ccc; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 30px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         td input { width: 100%; padding: 4px; border: none; background: transparent; }
         td input:disabled { background: #eee; }
         .edit-btn { background: #ff9500; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         .save-btn { background: #28a745; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         .del-btn { background: #ff3b30; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+        .log-section { background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; }
     </style>
 </head>
 <body>
@@ -66,25 +67,40 @@
 
     <div id="logs" class="content">
         <h2>流水帳記錄</h2>
-        <div style="display: flex; gap: 10px;">
+        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
             <input type="text" id="filterOrder" placeholder="篩選單號" oninput="renderLogs()">
             <input type="date" id="filterDate" oninput="renderLogs()">
             <input type="text" id="filterUser" placeholder="篩選人員" oninput="renderLogs()">
         </div>
-        <table>
-            <thead>
-                <tr>
-                    <th>時間</th><th>供應商</th><th>項目</th><th>首碼</th><th>尾碼</th><th>數量</th><th>人員</th><th>單號</th><th>操作</th>
-                </tr>
-            </thead>
-            <tbody id="logBody"></tbody>
-        </table>
-        <div id="pagination"></div>
+
+        <div class="log-section">
+            <h3>禮券登記記錄 (按每次確認顯示)</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>清單/範圍</th><th>Code 範圍/內容</th><th>總張數</th><th>供應商</th><th>項目</th><th>時間</th>
+                    </tr>
+                </thead>
+                <tbody id="regLogBody"></tbody>
+            </table>
+        </div>
+
+        <div class="log-section">
+            <h3>禮券使用記錄 (按每次確認顯示)</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>清單/範圍</th><th>Code 範圍/內容</th><th>總張數</th><th>供應商</th><th>項目</th><th>單號</th><th>時間</th>
+                    </tr>
+                </thead>
+                <tbody id="useLogBody"></tbody>
+            </table>
+        </div>
     </div>
 
     <script>
         const API_URL = "https://script.google.com/macros/s/AKfycbz8jMVaJLH03E9ORniS8xEY_q_kJDq5mYbJ1H-XbKhclJphSfCn48IGBZDIybM9q-heVw/exec";
-        let configData, currentBatch, allLogs = [], curPage = 1;
+        let configData, currentBatch, allLogs = [];
 
         window.onload = async function() {
             var res = await (await fetch(API_URL)).json();
@@ -108,61 +124,81 @@
             var fO = document.getElementById('filterOrder').value;
             var fD = document.getElementById('filterDate').value;
             var fU = document.getElementById('filterUser').value;
-            var filtered = allLogs.filter(function(l) {
-                return (l.data[6] || "").toString().includes(fO) && 
-                       (l.data[10] || "").toString().includes(fU) && 
-                       (!fD || new Date(l.data[7]).toISOString().split('T')[0] === fD);
+
+            // 過濾原始資料
+            var filteredLogs = allLogs.filter(function(l) {
+                var passOrder = !fO || (l.data[6] || "").toString().includes(fO) || (l.data[8] || "").toString().includes(fO);
+                var passUser = !fU || (l.data[10] || "").toString().includes(fU);
+                var logDate = l.data[7] ? new Date(l.data[7]).toISOString().split('T')[0] : "";
+                var logDate2 = l.data[9] ? new Date(l.data[9]).toISOString().split('T')[0] : "";
+                var passDate = !fD || logDate === fD || logDate2 === fD;
+                return passOrder && passUser && passDate && (l.data[11] !== "已登記刪除");
             });
-            filtered.sort(function(a, b) { return new Date(b.data[7]) - new Date(a.data[7]); });
-            
-            var start = (curPage - 1) * 50;
-            var pageData = filtered.slice(start, start + 50);
-            var body = document.getElementById('logBody');
-            body.innerHTML = "";
-            
-            pageData.forEach(function(l, i) {
-                var tr = document.createElement('tr');
-                var isDel = (l.data[11] === "已登記刪除");
-                var code = l.data[3].toString();
-                var head = code.length > 6 ? code.substring(0, 6) : code;
-                var tail = code.length > 6 ? code.substring(code.length - 6) : "";
+
+            // --- 1. 處理禮券登記記錄 (按 Batch 分組) ---
+            var regGroups = {};
+            filteredLogs.forEach(function(l) {
+                var batchId = l.data[0];
+                if (!batchId) return;
+                if (!regGroups[batchId]) {
+                    regGroups[batchId] = { supplier: l.data[1], gift: l.data[2], codes: [], time: l.data[7] };
+                }
+                regGroups[batchId].codes.push(l.data[3].toString());
+            });
+
+            var regLogBody = document.getElementById('regLogBody');
+            regLogBody.innerHTML = "";
+            Object.keys(regGroups).sort((a,b)=>b-a).forEach(function(key) {
+                var g = regGroups[key];
+                var total = g.codes.length;
+                g.codes.sort();
+                var mode = "範圍"; // 簡易判定，若僅有一張或連續則為範圍
+                var codeStr = g.codes[0] + " ~ " + g.codes[total - 1];
+                if (total === 1) codeStr = g.codes[0];
                 
-                tr.innerHTML = "<td>" + new Date(l.data[7]).toLocaleString() + "</td>" +
-                    "<td>" + l.data[1] + "</td>" +
-                    "<td>" + l.data[2] + "</td>" +
-                    "<td>" + head + "</td>" +
-                    "<td>" + tail + "</td>" +
-                    "<td>1</td>" +
-                    "<td>" + (l.data[10] || "") + "</td>" +
-                    "<td><input type='text' class='edit-in-"+i+"' value='"+(l.data[6] || "")+"' disabled></td>" +
-                    "<td>" + (!isDel ? "<button class='edit-btn' id='e"+i+"' onclick='toggleEdit("+i+")'>編</button>" +
-                    "<button class='save-btn' id='s"+i+"' style='display:none' onclick='saveRow("+i+", \""+l.sheet+"\", "+l.row+")'>存</button>" +
-                    "<button class='del-btn' onclick='delLog(\""+l.sheet+"\", "+l.row+")'>刪</button>" : "已刪除") + "</td>";
-                body.appendChild(tr);
+                var tr = document.createElement('tr');
+                tr.innerHTML = "<td>" + mode + "</td>" +
+                               "<td>" + codeStr + "</td>" +
+                               "<td>" + total + "</td>" +
+                               "<td>" + g.supplier + "</td>" +
+                               "<td>" + g.gift + "</td>" +
+                               "<td>" + new Date(g.time).toLocaleString() + "</td>";
+                regLogBody.appendChild(tr);
             });
-            document.getElementById('pagination').innerHTML = "頁碼: " + curPage + 
-                " <button onclick='curPage=Math.max(1, curPage-1); renderLogs()'>上一頁</button>" +
-                " <button onclick='curPage++; renderLogs()'>下一頁</button>";
-        }
 
-        function toggleEdit(i) {
-            document.querySelectorAll('.edit-in-'+i).forEach(function(e){ e.disabled = false; });
-            document.getElementById('e'+i).style.display = 'none';
-            document.getElementById('s'+i).style.display = 'inline-block';
-        }
+            // --- 2. 處理禮券使用記錄 (按 單號+時間2 分組) ---
+            var useGroups = {};
+            filteredLogs.forEach(function(l) {
+                var useOrder = l.data[6];
+                var useTime = l.data[9];
+                if (!useOrder || l.data[5] !== "已使用") return;
+                var groupKey = useOrder + "_" + useTime;
+                if (!useGroups[groupKey]) {
+                    useGroups[groupKey] = { supplier: l.data[1], gift: l.data[2], codes: [], orderNo: useOrder, time: useTime };
+                }
+                useGroups[groupKey].codes.push(l.data[3].toString());
+            });
 
-        async function saveRow(i, s, r) {
-            var inputs = document.querySelectorAll('.edit-in-'+i);
-            var n = inputs[0].value;
-            await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'edit', sheet: s, row: r, newOrderNo: n}) });
-            loadLogs();
-        }
+            var useLogBody = document.getElementById('useLogBody');
+            useLogBody.innerHTML = "";
+            Object.keys(useGroups).forEach(function(key) {
+                var g = useGroups[key];
+                var total = g.codes.length;
+                g.codes.sort();
+                var mode = "範圍";
+                var codeStr = g.codes[0] + " ~ " + g.codes[total - 1];
+                if (total === 1) codeStr = g.codes[0];
 
-        async function delLog(s, r) {
-            if(confirm("確定刪除此筆記錄？")) {
-                await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'delete', sheet: s, row: r}) });
-                loadLogs();
-            }
+                var tr = document.createElement('tr');
+                tr.innerHTML = "<td>" + mode + "</td>" +
+                               "<td>" + codeStr + "</td>" +
+                               "<td>" + total + "</td>" +
+                               "<td>" + g.supplier + "</td>" +
+                               "<td>" + g.gift + "</td>" +
+                               "<td>" + g.orderNo + "</td>" +
+                               "<td>" + new Date(g.time).toLocaleString() + "</td>";
+                useLogBody.appendChild(tr);
+            });
         }
 
         function toggleMode(p, m) { document.getElementById(p + 'List').style.display = (m === 'list') ? 'block' : 'none'; document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none'; }
