@@ -153,10 +153,9 @@
             });
             updateGiftMenu();
             loadLogs();
-            initAutoTab(); // 初始化掃描器自動跳格監聽
+            initAutoTab(); 
         };
 
-        // 修正點：新增掃瞄器自動跳下一格功能邏輯
         function initAutoTab() {
             var binds = [
                 { id: "regStart", next: "regEnd" },
@@ -312,7 +311,7 @@
                 useLogBody.appendChild(tr);
             });
 
-            // --- 修正點：3. 動態計算並呈現所有禮券的未啟用及未使用剩餘數量表 ---
+            // --- 3. 動態計算庫存剩餘數量表 ---
             var sumGroups = {};
             baseLogs.forEach(function(l) {
                 var sup = l.data[1];
@@ -342,7 +341,7 @@
             });
         }
 
-        // 修正點：新增點擊啟用與再次彈出確認功能
+        // 修正點：落實已使用未啟用 Code 點擊啟用時的「雙重彈窗確認」邏輯
         async function activateGift() {
             var m = document.getElementById('actMode').value;
             var codes = (m === 'list') ? document.getElementById('actCodes').value.trim().split('\n') : getRangeCodes(document.getElementById('actStart').value.trim(), document.getElementById('actEnd').value.trim());
@@ -350,8 +349,8 @@
 
             // 第一次彈出確認
             if (!confirm("您確定要啟用這批共 " + codes.length + " 筆禮券嗎？")) return;
-            // 再次彈出確認 (已使用未啟用 - 彈出再次確認啟用)
-            if (!confirm("❗系統再次提醒：請確定執行『變更啟用狀態』操作？確定請按 [是/確定]")) return;
+            // 修正點：第二次強制再次彈出確認，特別針對「已使用未啟用」進行核對
+            if (!confirm("❗安全警示：您即將變更『已使用未啟用』代碼之啟動狀態。確定請按 [確定] 繼續執行")) return;
 
             var btn = document.getElementById('actBtn');
             btn.innerText = "啟用處理中...";
