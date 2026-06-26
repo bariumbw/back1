@@ -109,8 +109,8 @@
             var fD = document.getElementById('filterDate').value;
             var fU = document.getElementById('filterUser').value;
             var filtered = allLogs.filter(function(l) {
-                return l.data[6].toString().includes(fO) && 
-                       (l.data[8]||"").toString().includes(fU) && 
+                return (l.data[6] || "").toString().includes(fO) && 
+                       (l.data[10] || "").toString().includes(fU) && 
                        (!fD || new Date(l.data[7]).toISOString().split('T')[0] === fD);
             });
             filtered.sort(function(a, b) { return new Date(b.data[7]) - new Date(a.data[7]); });
@@ -122,14 +122,18 @@
             
             pageData.forEach(function(l, i) {
                 var tr = document.createElement('tr');
-                var isDel = (l.data[8] === "已登記刪除");
+                var isDel = (l.data[11] === "已登記刪除");
+                var code = l.data[3].toString();
+                var head = code.length > 6 ? code.substring(0, 6) : code;
+                var tail = code.length > 6 ? code.substring(code.length - 6) : "";
+                
                 tr.innerHTML = "<td>" + new Date(l.data[7]).toLocaleString() + "</td>" +
-                    "<td><input type='text' class='edit-in-"+i+"' value='"+l.data[1]+"' disabled></td>" +
-                    "<td><input type='text' class='edit-in-"+i+"' value='"+l.data[2]+"' disabled></td>" +
-                    "<td><input type='text' class='edit-in-"+i+"' value='"+l.data[3].substring(0,6)+"' disabled></td>" +
-                    "<td><input type='text' class='edit-in-"+i+"' value='"+l.data[3].substring(l.data[3].length-6)+"' disabled></td>" +
+                    "<td>" + l.data[1] + "</td>" +
+                    "<td>" + l.data[2] + "</td>" +
+                    "<td>" + head + "</td>" +
+                    "<td>" + tail + "</td>" +
                     "<td>1</td>" +
-                    "<td>" + (l.data[8] || "") + "</td>" +
+                    "<td>" + (l.data[10] || "") + "</td>" +
                     "<td><input type='text' class='edit-in-"+i+"' value='"+(l.data[6] || "")+"' disabled></td>" +
                     "<td>" + (!isDel ? "<button class='edit-btn' id='e"+i+"' onclick='toggleEdit("+i+")'>編</button>" +
                     "<button class='save-btn' id='s"+i+"' style='display:none' onclick='saveRow("+i+", \""+l.sheet+"\", "+l.row+")'>存</button>" +
@@ -149,7 +153,7 @@
 
         async function saveRow(i, s, r) {
             var inputs = document.querySelectorAll('.edit-in-'+i);
-            var n = inputs[4].value; // 單號
+            var n = inputs[0].value;
             await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'edit', sheet: s, row: r, newOrderNo: n}) });
             loadLogs();
         }
