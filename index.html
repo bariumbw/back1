@@ -27,7 +27,6 @@
     </style>
 </head>
 <body>
-    <!-- 主功能選單按鈕 -->
     <button id="btn-register" class="tab-btn active" onclick="showTab('register')">禮券登記</button>
     <button id="btn-use" class="tab-btn" onclick="showTab('use')">禮券使用</button>
     <button id="btn-logs" class="tab-btn" onclick="showTab('logs')">流水帳記錄</button>
@@ -79,13 +78,11 @@
             <button id="manualRefreshBtn" class="refresh-btn" onclick="refreshLogsHand(this)" style="margin: 0;">重新整理</button>
         </div>
 
-        <!-- 選擇 流水帳子記錄 的按鈕 -->
         <div style="margin-bottom: 15px;">
             <button id="sub-btn-reg" class="sub-tab-btn active" onclick="showSubLog('reg')">禮券登記記錄</button>
             <button id="sub-btn-use" class="sub-tab-btn" onclick="showSubLog('use')">禮券使用記錄</button>
         </div>
 
-        <!-- 禮券登記記錄區塊 -->
         <div id="log-section-reg" class="log-section active">
             <h3>禮券登記記錄 (按每次確認顯示)</h3>
             <table>
@@ -98,7 +95,6 @@
             </table>
         </div>
 
-        <!-- 禮券使用記錄區塊 -->
         <div id="log-section-use" class="log-section">
             <h3>禮券使用記錄 (按每次確認顯示)</h3>
             <table>
@@ -148,13 +144,11 @@
             btn.disabled = false;
         }
 
-        // 修正點：重構此功能，解決因為新登記項目沒有單號而被過濾掉的問題
         function renderLogs() {
             var fO = document.getElementById('filterOrder').value;
             var fD = document.getElementById('filterDate').value;
             var fU = document.getElementById('filterUser').value;
 
-            // 第一步：先排除已刪除的資料，並篩選人員
             var baseLogs = allLogs.filter(function(l) {
                 var passUser = !fU || (l.data[11] || "").toString().includes(fU);
                 var isDeleted = l.data[12] === "已登記刪除";
@@ -164,10 +158,8 @@
             // --- 1. 處理禮券登記記錄 ---
             var regGroups = {};
             baseLogs.forEach(function(l) {
-                // 如果有輸入單號篩選，而登記資料無單號，則在登記記錄中不顯示該筆
                 if (fO && !((l.data[7] || "").toString().includes(fO) || (l.data[9] || "").toString().includes(fO))) return;
                 
-                // 如果有日期篩選，比對 3:登記時間
                 if (fD) {
                     var rDate = l.data[3] ? new Date(l.data[3]).toISOString().split('T')[0] : "";
                     if (rDate !== fD) return;
@@ -211,13 +203,10 @@
                 var useOrder2 = l.data[9];  
                 var useTime2 = l.data[10];  
                 
-                // 使用記錄必須符合已使用狀態與具備單號
                 if (l.data[6] !== "已使用" || !useOrder) return; 
                 
-                // 單號篩選比對
                 if (fO && !(useOrder.toString().includes(fO) || (useOrder2 || "").toString().includes(fO))) return;
                 
-                // 日期篩選比對使用時間或使用時間2
                 if (fD) {
                     var logDate = useTime ? new Date(useTime).toISOString().split('T')[0] : "";
                     var logDate2 = useTime2 ? new Date(useTime2).toISOString().split('T')[0] : "";
@@ -283,8 +272,43 @@
         }
 
         function toggleMode(p, m) { document.getElementById(p + 'List').style.display = (m === 'list') ? 'block' : 'none'; document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none'; }
-        function applySuffixLogic(val, type) { var s = val.toString().trim(); if (type === "suffix_12") return s.slice(-12); if (type === "suffix_1") return s.slice(0, -1); if (type === "suffix_2") return s.slice(0, -2); return s; }
-        function getRangeCodes(start, end) { var sVal = parseInt(start.slice(-12)), eVal = parseInt(end.slice(-12)), prefix = start.slice(0, -12); var codes = []; for (var i = sVal; i <= eVal; i++) { codes.push(prefix + i.toString().padStart(12, '0')); } return codes; }
+        
+        // 修正點：切片過濾規則優化，先拆分出英文，僅對數字切片，完畢後接回
+        function applySuffixLogic(val, type) { 
+            var s = val.toString().trim(); 
+            var match = s.match(/^([A-Za-z]*)(.*)$/);
+            var prefix = match[1] || "";
+            var numPart = match[2] || "";
+            
+            if (type === "suffix_12") numPart = numPart.slice(-12);
+            else if (type === "suffix_1") numPart = numPart.slice(0, -1);
+            else if (type === "suffix_2") numPart = numPart.slice(0, -2);
+            
+            return prefix + numPart; 
+        }
+
+        // 修正點：核心重構範圍生成邏輯，自動識別代碼最前方的英文前綴，不計入數學計算，入庫時完整保留英文
+        function getRangeCodes(start, end) { 
+            var sStr = start.toString().trim();
+            var eStr = end.toString().trim();
+            
+            var sMatch = sStr.match(/^([A-Za-z]*)(.*)$/);
+            var eMatch = eStr.match(/^([A-Za-z]*)(.*)$/);
+            
+            var prefix = sMatch[1] || "";
+            var sNumStr = sMatch[2] || "0";
+            var eNumStr = eMatch[2] || "0";
+            
+            var sVal = parseInt(sNumStr, 10);
+            var eVal = parseInt(eNumStr, 10);
+            var padLen = sNumStr.length; 
+            
+            var codes = []; 
+            for (var i = sVal; i <= eVal; i++) { 
+                codes.push(prefix + i.toString().padStart(padLen, '0')); 
+            } 
+            return codes; 
+        }
         
         async function register(confirmed) { 
             var btn = document.getElementById('regBtn'); 
@@ -358,7 +382,22 @@
         }
 
         function calcTotal(id, target) { document.getElementById(target).innerText = "總張數: " + document.getElementById(id).value.trim().split('\n').filter(Boolean).length; }
-        function calcTotalRange(p) { var s = document.getElementById(p + 'Start').value.trim(), e = document.getElementById(p + 'End').value.trim(); var type = (window.foundData && window.foundData.calcType) ? window.foundData.calcType : null; var sV = parseInt(applySuffixLogic(s, type)), eV = parseInt(applySuffixLogic(e, type)); document.getElementById(p + 'Total').innerText = "總張數: " + (sV && eV ? (eV - sV + 1) : 0); }
+        
+        // 修正點：範圍張數即時試算優化，分離英文後提取純數字計算差值，支援帶英文的代碼即時反映正確張數
+        function calcTotalRange(p) { 
+            var s = document.getElementById(p + 'Start').value.trim();
+            var e = document.getElementById(p + 'End').value.trim(); 
+            if(!s || !e) { document.getElementById(p + 'Total').innerText = "總張數: 0"; return; }
+            
+            var sMatch = s.match(/^([A-Za-z]*)(.*)$/);
+            var eMatch = e.match(/^([A-Za-z]*)(.*)$/);
+            
+            var sNum = parseInt(sMatch[2] || "0", 10);
+            var eNum = parseInt(eMatch[2] || "0", 10);
+            
+            var total = (sNum && eNum && eNum >= sNum) ? (eNum - sNum + 1) : 0;
+            document.getElementById(p + 'Total').innerText = "總張數: " + total; 
+        }
         
         function handleSingleCheck(val) { 
             var code = document.getElementById('useMode').value === 'list' ? val.trim().split('\n')[0] : document.getElementById('useStart').value.trim(); 
