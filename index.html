@@ -28,6 +28,7 @@
 </head>
 <body>
     <button id="btn-register" class="tab-btn active" onclick="showTab('register')">禮券登記</button>
+    <button id="btn-activate" class="tab-btn" onclick="showTab('activate')">禮券啟用</button>
     <button id="btn-use" class="tab-btn" onclick="showTab('use')">禮券使用</button>
     <button id="btn-logs" class="tab-btn" onclick="showTab('logs')">流水帳記錄</button>
 
@@ -43,11 +44,28 @@
             <textarea id="regCodes" oninput="calcTotal('regCodes', 'regTotal')"></textarea>
         </div>
         <div id="regRange">
-            <input type="text" id="regStart" placeholder="起始" oninput="calcTotalRange('reg')">
-            <input type="text" id="regEnd" placeholder="結束" oninput="calcTotalRange('reg')">
+            <input type="text" id="regStart" placeholder="起始 (掃描後自動跳格)" oninput="calcTotalRange('reg')">
+            <input type="text" id="regEnd" placeholder="結束 (掃描後自動跳格)" oninput="calcTotalRange('reg')">
         </div>
         <h3 id="regTotal">總張數: 0</h3>
         <button id="regBtn" onclick="register(false)">確認登記</button>
+    </div>
+
+    <div id="activate" class="content">
+        <h2>禮券啟用管理 (已使用未啟用)</h2>
+        <select id="actMode" onchange="toggleMode('act', this.value)">
+            <option value="list">清單輸入</option>
+            <option value="range" selected>範圍輸入</option>
+        </select>
+        <div id="actList" style="display:none;">
+            <textarea id="actCodes" oninput="calcTotal('actCodes', 'actTotal')"></textarea>
+        </div>
+        <div id="actRange">
+            <input type="text" id="actStart" placeholder="起始 (掃描後自動跳格)" oninput="calcTotalRange('act')">
+            <input type="text" id="actEnd" placeholder="結束 (掃描後自動跳格)" oninput="calcTotalRange('act')">
+        </div>
+        <h3 id="actTotal">總張數: 0</h3>
+        <button id="actBtn" onclick="activateGift()">確認點擊啟用</button>
     </div>
 
     <div id="use" class="content">
@@ -60,12 +78,12 @@
             <textarea id="useCodes" oninput="handleSingleCheck(this.value); calcTotal('useCodes', 'useTotal')"></textarea>
         </div>
         <div id="useRange">
-            <input type="text" id="useStart" oninput="handleSingleCheck(this.value); calcTotalRange('use')">
-            <input type="text" id="useEnd" oninput="handleSingleCheck(this.value); calcTotalRange('use')">
+            <input type="text" id="useStart" placeholder="起始 (掃描後自動跳格)" oninput="handleSingleCheck(this.value); calcTotalRange('use')">
+            <input type="text" id="useEnd" placeholder="結束 (掃描後自動跳格)" oninput="handleSingleCheck(this.value); calcTotalRange('use')">
         </div>
         <h3 id="useTotal">總張數: 0</h3>
         <h3 id="useInfoDisplay">請輸入編號...</h3>
-        <input type="text" id="orderNo" placeholder="單號">
+        <input type="text" id="orderNo" placeholder="單號 (掃描後自動跳格)">
         <button id="useBtn" onclick="useGift(false)" disabled>確認批量使用</button>
     </div>
 
@@ -81,6 +99,7 @@
         <div style="margin-bottom: 15px;">
             <button id="sub-btn-reg" class="sub-tab-btn active" onclick="showSubLog('reg')">禮券登記記錄</button>
             <button id="sub-btn-use" class="sub-tab-btn" onclick="showSubLog('use')">禮券使用記錄</button>
+            <button id="sub-btn-sum" class="sub-tab-btn" onclick="showSubLog('sum')">庫存剩餘數量統計</button>
         </div>
 
         <div id="log-section-reg" class="log-section active">
@@ -106,6 +125,18 @@
                 <tbody id="useLogBody"></tbody>
             </table>
         </div>
+
+        <div id="log-section-sum" class="log-section">
+            <h3>所有禮券剩餘庫存統計表</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>供應商</th><th>禮券項目</th><th>未啟用剩餘數量</th><th>未使用剩餘數量</th>
+                    </tr>
+                </thead>
+                <tbody id="summaryLogBody"></tbody>
+            </table>
+        </div>
     </div>
 
     <script>
@@ -122,7 +153,33 @@
             });
             updateGiftMenu();
             loadLogs();
+            initAutoTab(); // 初始化掃描器自動跳格監聽
         };
+
+        // 修正點：新增掃瞄器自動跳下一格功能邏輯
+        function initAutoTab() {
+            var binds = [
+                { id: "regStart", next: "regEnd" },
+                { id: "regEnd", next: "regBtn" },
+                { id: "actStart", next: "actEnd" },
+                { id: "actEnd", next: "actBtn" },
+                { id: "useStart", next: "useEnd" },
+                { id: "useEnd", next: "orderNo" },
+                { id: "orderNo", next: "useBtn" }
+            ];
+            binds.forEach(function(b) {
+                var el = document.getElementById(b.id);
+                if(el) {
+                    el.addEventListener("keydown", function(e) {
+                        if(e.key === "Enter" || e.keyCode === 13) {
+                            e.preventDefault();
+                            var n = document.getElementById(b.next);
+                            if(n) { n.focus(); if(n.select) n.select(); }
+                        }
+                    });
+                }
+            });
+        }
 
         async function refreshBatchDisplay() {
             currentBatch = await (await fetch(API_URL + "?action=getBatch")).text();
@@ -195,7 +252,7 @@
                 regLogBody.appendChild(tr);
             });
 
-            // --- 2. 處理禮券使用記錄 (修正點：優化篩選條件與 Key 生成邏輯，確保能完整抓取並呈現在畫面上) ---
+            // --- 2. 處理禮券使用記錄 ---
             var useGroups = {};
             baseLogs.forEach(function(l) {
                 var status = l.data[6];
@@ -204,20 +261,16 @@
                 var useOrder2 = l.data[9] || "";  
                 var useTime2 = l.data[10] || "";  
                 
-                // 只要狀態是已使用，且有填寫過任何一組單號即放行
                 if (status !== "已使用" || (!useOrder && !useOrder2)) return; 
                 
-                // 單號篩選比對
                 if (fO && !(useOrder.toString().includes(fO) || useOrder2.toString().includes(fO))) return;
                 
-                // 日期篩選比對使用時間或使用時間2
                 if (fD) {
                     var logDate = useTime ? new Date(useTime).toISOString().split('T')[0] : "";
                     var logDate2 = useTime2 ? new Date(useTime2).toISOString().split('T')[0] : "";
                     if (logDate !== fD && logDate2 !== fD) return;
                 }
                 
-                // 以單號與時間特徵建立唯一識別 Key 進行分組
                 var groupKey = l.data[1] + "_" + l.data[2] + "_" + useOrder + "_" + useOrder2;
                 if (!useGroups[groupKey]) {
                     useGroups[groupKey] = { 
@@ -258,6 +311,70 @@
                                "<td>" + t2 + "</td>";
                 useLogBody.appendChild(tr);
             });
+
+            // --- 修正點：3. 動態計算並呈現所有禮券的未啟用及未使用剩餘數量表 ---
+            var sumGroups = {};
+            baseLogs.forEach(function(l) {
+                var sup = l.data[1];
+                var gift = l.data[2];
+                var isAct = l.data[5]; 
+                var isUse = l.data[6]; 
+                if(!sup || !gift) return;
+
+                var k = sup + "|||" + gift;
+                if(!sumGroups[k]) {
+                    sumGroups[k] = { supplier: sup, gift: gift, unActivated: 0, unUsed: 0 };
+                }
+                if(isAct === "未啟動") sumGroups[k].unActivated++;
+                if(isUse === "未使用") sumGroups[k].unUsed++;
+            });
+
+            var summaryLogBody = document.getElementById('summaryLogBody');
+            summaryLogBody.innerHTML = "";
+            Object.keys(sumGroups).forEach(function(key) {
+                var g = sumGroups[key];
+                var tr = document.createElement('tr');
+                tr.innerHTML = "<td>" + g.supplier + "</td>" +
+                               "<td>" + g.gift + "</td>" +
+                               "<td>" + g.unActivated + " 張</td>" +
+                               "<td>" + g.unUsed + " 張</td>";
+                summaryLogBody.appendChild(tr);
+            });
+        }
+
+        // 修正點：新增點擊啟用與再次彈出確認功能
+        async function activateGift() {
+            var m = document.getElementById('actMode').value;
+            var codes = (m === 'list') ? document.getElementById('actCodes').value.trim().split('\n') : getRangeCodes(document.getElementById('actStart').value.trim(), document.getElementById('actEnd').value.trim());
+            if(codes.length === 0 || !codes[0]) { alert("請輸入有效的代碼範圍或清單！"); return; }
+
+            // 第一次彈出確認
+            if (!confirm("您確定要啟用這批共 " + codes.length + " 筆禮券嗎？")) return;
+            // 再次彈出確認 (已使用未啟用 - 彈出再次確認啟用)
+            if (!confirm("❗系統再次提醒：請確定執行『變更啟用狀態』操作？確定請按 [是/確定]")) return;
+
+            var btn = document.getElementById('actBtn');
+            btn.innerText = "啟用處理中...";
+            btn.disabled = true;
+
+            var res = await (await fetch(API_URL, {
+                method: "POST",
+                body: JSON.stringify({ mode: 'activate', payload: codes })
+            })).json();
+
+            btn.innerText = "確認點擊啟用";
+            btn.disabled = false;
+
+            if(res.result === "success") {
+                alert("啟用成功！已將 " + res.count + " 筆禮券變更為已啟動狀態。");
+                document.getElementById('actStart').value = "";
+                document.getElementById('actEnd').value = "";
+                document.getElementById('actCodes').value = "";
+                document.getElementById('actTotal').innerText = "總張數: 0";
+                loadLogs();
+            } else {
+                alert("更新失敗：" + res.message);
+            }
         }
 
         function showTab(id) { 
@@ -294,6 +411,7 @@
         function getRangeCodes(start, end) { 
             var sStr = start.toString().trim();
             var eStr = end.toString().trim();
+            if(!sStr || !eStr) return [];
             
             var sMatch = sStr.match(/^([A-Za-z]*)(.*)$/);
             var eMatch = eStr.match(/^([A-Za-z]*)(.*)$/);
