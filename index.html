@@ -43,6 +43,7 @@
 <div id="toast">存檔成功！</div>
 
 <div class="container">
+    <!-- 系統驗證登入頁面 -->
     <div id="loginPage" class="page active">
         <h2>禮券系統驗證</h2>
         <div class="form-group"><label>Email</label><input type="email" id="loginEmail"></div>
@@ -50,6 +51,7 @@
         <button onclick="handleLogin()" style="width:100%;">登入系統</button>
     </div>
 
+    <!-- 主程式功能應用頁面 (登入成功後顯示) -->
     <div id="appPage" class="page">
         <nav style="margin-bottom:20px; display:flex; gap:10px; flex-wrap: wrap;">
             <button id="nav-regPage" class="nav-btn active" onclick="switchPage('regPage')">禮券登記</button>
@@ -59,6 +61,7 @@
             <button id="nav-usagePage" class="nav-btn" onclick="switchPage('usagePage')">使用量總數</button>
         </nav>
 
+        <!-- 頁面 1: 禮券登記 -->
         <div id="regPage" class="page active">
             <h2>禮券登記 (Batch: <span id="batchDisplay">讀取中...</span>)</h2>
             <div class="reg-grid">
@@ -88,6 +91,7 @@
             <button id="regBtn" onclick="register(false)" style="width:100%; padding: 12px;">確認登記</button>
         </div>
 
+        <!-- 頁面 2: 禮券啟用管理 -->
         <div id="actPage" class="page">
             <h2>禮券啟用管理 (已使用未啟用)</h2>
             <div class="form-group">
@@ -109,6 +113,7 @@
             <button id="actBtn" onclick="activateGift()" style="width:100%; padding: 12px; background: #0071e3;">確認點擊啟用</button>
         </div>
 
+        <!-- 頁面 3: 禮券使用 -->
         <div id="usePage" class="page">
             <h2>禮券使用</h2>
             <div class="form-group">
@@ -132,6 +137,7 @@
             <button id="useBtn" onclick="useGift(false)" style="width:100%; padding: 12px;" disabled>確認批量使用</button>
         </div>
 
+        <!-- 頁面 4: 流水帳記錄 -->
         <div id="recordsPage" class="page">
             <h2>流水帳記錄 <button onclick="loadLogs()" style="font-size:12px; background: #6c757d;">重新整理</button></h2>
             <div style="background:#f9f9f9; padding:15px; border-radius:8px; margin-bottom:15px; display:grid; grid-template-columns: repeat(4, 1fr); gap:10px;">
@@ -145,12 +151,14 @@
                 </select>
             </div>
 
+            <!-- 子記錄分頁切換按鈕 -->
             <div style="margin-bottom: 15px;">
                 <button id="sub-btn-reg" class="sub-tab-btn active" onclick="showSubLog('reg')">禮券登記記錄</button>
                 <button id="sub-btn-use" class="sub-tab-btn" onclick="showSubLog('use')">禮券使用記錄</button>
                 <button id="sub-btn-sum" class="sub-tab-btn" onclick="showSubLog('sum')">庫存剩餘數量統計</button>
             </div>
 
+            <!-- 子功能區塊 1: 禮券登記記錄 -->
             <div id="log-section-reg" class="log-section active">
                 <h3>禮券登記記錄 (按每次確認顯示)</h3>
                 <table>
@@ -163,6 +171,7 @@
                 </table>
             </div>
 
+            <!-- 子功能區塊 2: 禮券使用記錄 -->
             <div id="log-section-use" class="log-section">
                 <h3>禮券使用記錄 (按每次確認顯示)</h3>
                 <table>
@@ -175,6 +184,7 @@
                 </table>
             </div>
 
+            <!-- 子功能區塊 3: 庫存剩餘數量統計 -->
             <div id="log-section-sum" class="log-section">
                 <h3>所有禮券剩餘庫存統計表</h3>
                 <table>
@@ -188,6 +198,7 @@
             </div>
         </div>
 
+        <!-- 頁面 5: 使用量總數 -->
         <div id="usagePage" class="page">
             <h2>使用量總數</h2>
             <div style="background:#f9f9f9; padding:15px; border-radius:8px; margin-bottom:15px; display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
@@ -388,7 +399,7 @@
         var fO = document.getElementById('filterOrder').value;
         var fD = document.getElementById('filterDate').value;
         var fU = document.getElementById('filterUser').value;
-        var fA = document.getElementById('filterActiveStatus').value; // 獲取狀態篩選值
+        var fA = document.getElementById('filterActiveStatus').value; 
 
         var baseLogs = allLogs.filter(function(l) {
             var passUser = !fU || (l.data[11] || "").toString().includes(fU);
@@ -430,10 +441,10 @@
             regLogBody.appendChild(tr);
         });
 
-        // --- 2. 處理禮券使用記錄 (精確還原：按每次點擊確認批量使用動作，一組一組顯示) ---
+        // --- 2. 處理禮券使用記錄 (完美恢復：按每次點擊確認批量使用動作，一組一組顯示，並支援依時間新舊排序) ---
         var useGroups = {};
         baseLogs.forEach(function(l) {
-            var batchId = l.data[0] || ""; // 獲取當前資料行的 Batch ID
+            var batchId = l.data[0] || ""; 
             var supplier = l.data[1];
             var giftName = l.data[2];
             var isActivated = l.data[5]; 
@@ -445,7 +456,6 @@
             
             if (!supplier || !giftName) return;
 
-            // 修正篩選：若有輸入篩選條件則過濾
             if (fO && !(useOrder.toString().includes(fO) || useOrder2.toString().includes(fO))) return;
             if (fD) {
                 var logDate = useTime ? new Date(useTime).toISOString().split('T')[0] : "";
@@ -453,13 +463,11 @@
                 if (logDate !== fD && logDate2 !== fD) return;
             }
             
-            // 只有真正進入「已使用」狀態的卡號才可以進來收集顯示
             if (status === "已使用") {
                 var actualOrder = useOrder || useOrder2 || "無單號";
                 var actualTime = useTime || useTime2 || "無時間";
 
-                // 【精確修改修正點】：加上 batchId 與精確時間戳 actualTime 組成聯合唯一 Key 
-                // 這樣每次在「禮券使用」頁面點擊【確認批量使用】產生的資料，都會被完美鎖定成一組獨立紀錄
+                // 【恢復關鍵核心】：建立聯合主鍵 groupKey 確保每次確認動作獨立聚合為一組
                 var groupKey = batchId + "_" + actualOrder + "_" + actualTime + "_" + supplier + "_" + giftName;
 
                 if (!useGroups[groupKey]) {
@@ -472,7 +480,7 @@
                         orderNo2: useOrder2 ? useOrder2 : "-",
                         timeStr2: useTime2 ? new Date(useTime2).toLocaleString() : "-",
                         activationStatuses: [],
-                        sortTimestamp: actualTime ? new Date(actualTime).getTime() : 0 // 精確紀錄該次操作的時間戳
+                        sortTimestamp: actualTime ? new Date(actualTime).getTime() : 0 
                     };
                 }
                 
@@ -484,23 +492,17 @@
         var useLogBody = document.getElementById('useLogBody');
         useLogBody.innerHTML = "";
         
-        // 1) 排序：按批量確認使用時間由新到舊排序 (最新使用的確認动作排在最上方)
+        // 排序：以「整組確認的時間戳」進行由新到舊排序，絕不拆開一組組的結構
         Object.keys(useGroups).sort(function(a, b) {
             return useGroups[b].sortTimestamp - useGroups[a].sortTimestamp;
         }).forEach(function(key) {
             var g = useGroups[key];
             if (g.codes.length === 0) return;
 
-            // 分析該整組批次內是否有任何卡片屬於未啟動狀態
             var hasUnactivated = g.activationStatuses.indexOf("未啟動") !== -1;
 
-            // 2) 狀態過濾條件判斷
-            if (fA === "unactivated" && !hasUnactivated) {
-                return; // 如果選取「未啟用」，但這批卡片全都是已啟動狀態（沒有啟動按鈕），則排除
-            }
-            if (fA === "activated" && hasUnactivated) {
-                return; // 如果選取「已啟用」，但這批卡片裡包含任何未啟動項目（即還有啟動按鈕），則排除
-            }
+            if (fA === "unactivated" && !hasUnactivated) return;
+            if (fA === "activated" && hasUnactivated) return;
 
             var total = g.codes.length;
             var codeStr = formatAllCodesToRanges(g.codes);
@@ -523,7 +525,7 @@
             } else if (hasUnactivated) {
                 actTdContent = "<span style='color:red;'>未啟用</span><br><button class='act-row-btn' style='margin-top:4px;' onclick='activateSelectedList(" + unactJsonStr + ")'>啟動按鈕</button>";
             } else {
-                actTdContent = "<span style='color:green; font-weight:600;'>試啟用</span>";
+                actTdContent = "<span style='color:green; font-weight:600;'>已啟用</span>";
             }
 
             var tr = document.createElement('tr');
