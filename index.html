@@ -430,9 +430,10 @@
             regLogBody.appendChild(tr);
         });
 
-        // --- 2. 處理禮券使用記錄 ---
+        // --- 2. 處理禮券使用記錄 (精確還原：按每次點擊確認批量使用動作，一組一組顯示) ---
         var useGroups = {};
         baseLogs.forEach(function(l) {
+            var batchId = l.data[0] || ""; // 獲取當前資料行的 Batch ID
             var supplier = l.data[1];
             var giftName = l.data[2];
             var isActivated = l.data[5]; 
@@ -454,11 +455,12 @@
             
             // 只有真正進入「已使用」狀態的卡號才可以進來收集顯示
             if (status === "已使用") {
-                // 找出這次點擊確認批量使用動作的實際單號與時間
                 var actualOrder = useOrder || useOrder2 || "無單號";
                 var actualTime = useTime || useTime2 || "無時間";
 
-                var groupKey = actualOrder + "_" + actualTime + "_" + supplier + "_" + giftName;
+                // 【精確修改修正點】：加上 batchId 與精確時間戳 actualTime 組成聯合唯一 Key 
+                // 這樣每次在「禮券使用」頁面點擊【確認批量使用】產生的資料，都會被完美鎖定成一組獨立紀錄
+                var groupKey = batchId + "_" + actualOrder + "_" + actualTime + "_" + supplier + "_" + giftName;
 
                 if (!useGroups[groupKey]) {
                     useGroups[groupKey] = { 
@@ -470,7 +472,7 @@
                         orderNo2: useOrder2 ? useOrder2 : "-",
                         timeStr2: useTime2 ? new Date(useTime2).toLocaleString() : "-",
                         activationStatuses: [],
-                        sortTimestamp: actualTime ? new Date(actualTime).getTime() : 0 // 用於最新排序
+                        sortTimestamp: actualTime ? new Date(actualTime).getTime() : 0 // 精確紀錄該次操作的時間戳
                     };
                 }
                 
@@ -482,14 +484,14 @@
         var useLogBody = document.getElementById('useLogBody');
         useLogBody.innerHTML = "";
         
-        // 1) 排序：按批量確認使用時間由新到舊排序 (最新使用的排最上方)
+        // 1) 排序：按批量確認使用時間由新到舊排序 (最新使用的確認动作排在最上方)
         Object.keys(useGroups).sort(function(a, b) {
             return useGroups[b].sortTimestamp - useGroups[a].sortTimestamp;
         }).forEach(function(key) {
             var g = useGroups[key];
             if (g.codes.length === 0) return;
 
-            // 分析該批次內是否有未啟動或已啟動的項目
+            // 分析該整組批次內是否有任何卡片屬於未啟動狀態
             var hasUnactivated = g.activationStatuses.indexOf("未啟動") !== -1;
 
             // 2) 狀態過濾條件判斷
@@ -521,7 +523,7 @@
             } else if (hasUnactivated) {
                 actTdContent = "<span style='color:red;'>未啟用</span><br><button class='act-row-btn' style='margin-top:4px;' onclick='activateSelectedList(" + unactJsonStr + ")'>啟動按鈕</button>";
             } else {
-                actTdContent = "<span style='color:green; font-weight:600;'>已啟用</span>";
+                actTdContent = "<span style='color:green; font-weight:600;'>試啟用</span>";
             }
 
             var tr = document.createElement('tr');
