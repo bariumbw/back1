@@ -195,25 +195,30 @@
                 regLogBody.appendChild(tr);
             });
 
-            // --- 2. 處理禮券使用記錄 ---
+            // --- 2. 處理禮券使用記錄 (修正點：優化篩選條件與 Key 生成邏輯，確保能完整抓取並呈現在畫面上) ---
             var useGroups = {};
             baseLogs.forEach(function(l) {
-                var useOrder = l.data[7];   
-                var useTime = l.data[8];    
-                var useOrder2 = l.data[9];  
-                var useTime2 = l.data[10];  
+                var status = l.data[6];
+                var useOrder = l.data[7] || "";   
+                var useTime = l.data[8] || "";    
+                var useOrder2 = l.data[9] || "";  
+                var useTime2 = l.data[10] || "";  
                 
-                if (l.data[6] !== "已使用" || !useOrder) return; 
+                // 只要狀態是已使用，且有填寫過任何一組單號即放行
+                if (status !== "已使用" || (!useOrder && !useOrder2)) return; 
                 
-                if (fO && !(useOrder.toString().includes(fO) || (useOrder2 || "").toString().includes(fO))) return;
+                // 單號篩選比對
+                if (fO && !(useOrder.toString().includes(fO) || useOrder2.toString().includes(fO))) return;
                 
+                // 日期篩選比對使用時間或使用時間2
                 if (fD) {
                     var logDate = useTime ? new Date(useTime).toISOString().split('T')[0] : "";
                     var logDate2 = useTime2 ? new Date(useTime2).toISOString().split('T')[0] : "";
                     if (logDate !== fD && logDate2 !== fD) return;
                 }
                 
-                var groupKey = useOrder + "_" + useTime + "_" + (useOrder2 || "");
+                // 以單號與時間特徵建立唯一識別 Key 進行分組
+                var groupKey = l.data[1] + "_" + l.data[2] + "_" + useOrder + "_" + useOrder2;
                 if (!useGroups[groupKey]) {
                     useGroups[groupKey] = { 
                         supplier: l.data[1], 
@@ -249,7 +254,7 @@
                                "<td>" + g.gift + "</td>" +
                                "<td>" + g.orderNo + "</td>" +
                                "<td>" + t1 + "</td>" +
-                               "<td>" + (g.orderNo2 || "") + "</td>" +
+                               "<td>" + g.orderNo2 + "</td>" +
                                "<td>" + t2 + "</td>";
                 useLogBody.appendChild(tr);
             });
@@ -273,7 +278,6 @@
 
         function toggleMode(p, m) { document.getElementById(p + 'List').style.display = (m === 'list') ? 'block' : 'none'; document.getElementById(p + 'Range').style.display = (m === 'range') ? 'block' : 'none'; }
         
-        // 修正點：切片過濾規則優化，先拆分出英文，僅對數字切片，完畢後接回
         function applySuffixLogic(val, type) { 
             var s = val.toString().trim(); 
             var match = s.match(/^([A-Za-z]*)(.*)$/);
@@ -287,7 +291,6 @@
             return prefix + numPart; 
         }
 
-        // 修正點：核心重構範圍生成邏輯，自動識別代碼最前方的英文前綴，不計入數學計算，入庫時完整保留英文
         function getRangeCodes(start, end) { 
             var sStr = start.toString().trim();
             var eStr = end.toString().trim();
@@ -383,7 +386,6 @@
 
         function calcTotal(id, target) { document.getElementById(target).innerText = "總張數: " + document.getElementById(id).value.trim().split('\n').filter(Boolean).length; }
         
-        // 修正點：範圍張數即時試算優化，分離英文後提取純數字計算差值，支援帶英文的代碼即時反映正確張數
         function calcTotalRange(p) { 
             var s = document.getElementById(p + 'Start').value.trim();
             var e = document.getElementById(p + 'End').value.trim(); 
