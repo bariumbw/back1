@@ -83,20 +83,20 @@
             <button id="sub-btn-use" class="sub-tab-btn" onclick="showSubLog('use')">禮券使用記錄</button>
         </div>
 
-        <!-- 禮券登記記錄區塊 -->
+        <!-- 禮券登記記錄區塊 (修正：加入 登記時間 表格欄位) -->
         <div id="log-section-reg" class="log-section active">
             <h3>禮券登記記錄 (按每次確認顯示)</h3>
             <table>
                 <thead>
                     <tr>
-                        <th>清單/範圍</th><th>Code 範圍/內容</th><th>總張數</th><th>供應商</th><th>項目</th><th>時間</th>
+                        <th>清單/範圍</th><th>Code 範圍/內容</th><th>總張數</th><th>供應商</th><th>項目</th><th>登記時間</th>
                     </tr>
                 </thead>
                 <tbody id="regLogBody"></tbody>
             </table>
         </div>
 
-        <!-- 禮券使用記錄區塊 (修正：顯示表格增加 單號2 與 時間2) -->
+        <!-- 禮券使用記錄區塊 -->
         <div id="log-section-use" class="log-section">
             <h3>禮券使用記錄 (按每次確認顯示)</h3>
             <table>
@@ -142,24 +142,26 @@
             var fU = document.getElementById('filterUser').value;
 
             var filteredLogs = allLogs.filter(function(l) {
-                var passOrder = !fO || (l.data[6] || "").toString().includes(fO) || (l.data[8] || "").toString().includes(fO);
-                var passUser = !fU || (l.data[10] || "").toString().includes(fU);
-                var logDate = l.data[7] ? new Date(l.data[7]).toISOString().split('T')[0] : "";
-                var logDate2 = l.data[9] ? new Date(l.data[9]).toISOString().split('T')[0] : "";
+                // 新結構對位：l.data[7] 為 單號, l.data[9] 為 單號2, l.data[11] 為 人員, l.data[12] 為 備註
+                // l.data[8] 為 時間, l.data[10] 為 時間2
+                var passOrder = !fO || (l.data[7] || "").toString().includes(fO) || (l.data[9] || "").toString().includes(fO);
+                var passUser = !fU || (l.data[11] || "").toString().includes(fU);
+                var logDate = l.data[8] ? new Date(l.data[8]).toISOString().split('T')[0] : "";
+                var logDate2 = l.data[10] ? new Date(l.data[10]).toISOString().split('T')[0] : "";
                 var passDate = !fD || logDate === fD || logDate2 === fD;
-                return passOrder && passUser && passDate && (l.data[11] !== "已登記刪除");
+                return passOrder && passUser && passDate && (l.data[12] !== "已登記刪除");
             });
 
-            // --- 1. 處理禮券登記記錄 ---
+            // --- 1. 處理禮券登記記錄 (修正來源：l.data[3] 為登記時間, l.data[4] 為 Code) ---
             var regGroups = {};
             filteredLogs.forEach(function(l) {
-                if (l.data[5] === "已使用") return;
+                if (l.data[6] === "已使用") return; // l.data[6] 是使用狀態
                 var batchId = l.data[0];
                 if (!batchId) return;
                 if (!regGroups[batchId]) {
-                    regGroups[batchId] = { supplier: l.data[1], gift: l.data[2], codes: [], time: l.data[7] };
+                    regGroups[batchId] = { supplier: l.data[1], gift: l.data[2], codes: [], regTime: l.data[3] };
                 }
-                regGroups[batchId].codes.push(l.data[3].toString());
+                regGroups[batchId].codes.push(l.data[4].toString());
             });
 
             var regLogBody = document.getElementById('regLogBody');
@@ -172,26 +174,27 @@
                 var codeStr = g.codes[0] + " ~ " + g.codes[total - 1];
                 if (total === 1) codeStr = g.codes[0];
                 
+                var rTime = g.regTime ? new Date(g.regTime).toLocaleString() : "";
+                
                 var tr = document.createElement('tr');
                 tr.innerHTML = "<td>" + mode + "</td>" +
                                "<td>" + codeStr + "</td>" +
                                "<td>" + total + "</td>" +
                                "<td>" + g.supplier + "</td>" +
                                "<td>" + g.gift + "</td>" +
-                               "<td>" + new Date(g.time).toLocaleString() + "</td>";
+                               "<td>" + rTime + "</td>";
                 regLogBody.appendChild(tr);
             });
 
-            // --- 2. 處理禮券使用記錄 (修正：提取單號2、時間2數據進入群組) ---
+            // --- 2. 處理禮券使用記錄 (修正來源：對應 13 欄新架構位置) ---
             var useGroups = {};
             filteredLogs.forEach(function(l) {
-                var useOrder = l.data[6];
-                var useTime = l.data[7];
-                var useOrder2 = l.data[8];
-                var useTime2 = l.data[9];
-                if (l.data[5] !== "已使用" || !useOrder) return;
+                var useOrder = l.data[7];   // 7:單號
+                var useTime = l.data[8];    // 8:時間
+                var useOrder2 = l.data[9];  // 9:單號2
+                var useTime2 = l.data[10];  // 10:時間2
+                if (l.data[6] !== "已使用" || !useOrder) return; // 6:使用狀態
                 
-                // 以第一次確認或第二次確認的標記點作為分組基準
                 var groupKey = useOrder + "_" + useTime + "_" + (useOrder2 || "");
                 if (!useGroups[groupKey]) {
                     useGroups[groupKey] = { 
@@ -204,7 +207,7 @@
                         time2: useTime2
                     };
                 }
-                useGroups[groupKey].codes.push(l.data[3].toString());
+                useGroups[groupKey].codes.push(l.data[4].toString()); // 4:Code
             });
 
             var useLogBody = document.getElementById('useLogBody');
@@ -254,7 +257,6 @@
         function applySuffixLogic(val, type) { var s = val.toString().trim(); if (type === "suffix_12") return s.slice(-12); if (type === "suffix_1") return s.slice(0, -1); if (type === "suffix_2") return s.slice(0, -2); return s; }
         function getRangeCodes(start, end) { var sVal = parseInt(start.slice(-12)), eVal = parseInt(end.slice(-12)), prefix = start.slice(0, -12); var codes = []; for (var i = sVal; i <= eVal; i++) { codes.push(prefix + i.toString().padStart(12, '0')); } return codes; }
         
-        // 修正：登記完成後改為刷新數據與 Batch，不再執行全頁跳轉
         async function register(confirmed) { 
             var btn = document.getElementById('regBtn'); 
             btn.innerText = "處理中..."; 
@@ -280,12 +282,10 @@
                 }
             } else if (res.result === "success") {
                 alert("登記完成！成功新增 " + res.count + " 筆。"); 
-                // 清空輸入框
                 document.getElementById('regStart').value = "";
                 document.getElementById('regEnd').value = "";
                 document.getElementById('regCodes').value = "";
                 document.getElementById('regTotal').innerText = "總張數: 0";
-                // 刷新資料，不跳頁
                 await refreshBatchDisplay();
                 loadLogs(); 
             } else {
@@ -293,7 +293,6 @@
             }
         }
 
-        // 修正：使用完成後改為刷新數據，不再刷新全頁與跳轉
         async function useGift(confirmed) { 
             var btn = document.getElementById('useBtn'); 
             btn.innerText = "處理中..."; 
@@ -318,7 +317,6 @@
                 if(confirm(res.message)) useGift(true); 
             } else { 
                 alert("處理完成！"); 
-                // 清空輸入框
                 document.getElementById('useStart').value = "";
                 document.getElementById('useEnd').value = "";
                 document.getElementById('useCodes').value = "";
@@ -326,7 +324,6 @@
                 document.getElementById('useTotal').innerText = "總張數: 0";
                 document.getElementById('useInfoDisplay').innerText = "請輸入編號...";
                 document.getElementById('useBtn').disabled = true;
-                // 刷新資料，不跳頁
                 loadLogs(); 
             } 
         }
