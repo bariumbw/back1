@@ -134,15 +134,10 @@
 
         <div id="recordsPage" class="page">
             <h2>流水帳記錄 <button onclick="loadLogs()" style="font-size:12px; background: #6c757d;">重新整理</button></h2>
-            <div style="background:#f9f9f9; padding:15px; border-radius:8px; margin-bottom:15px; display:grid; grid-template-columns: repeat(4, 1fr); gap:10px;">
+            <div style="background:#f9f9f9; padding:15px; border-radius:8px; margin-bottom:15px; display:grid; grid-template-columns: repeat(3, 1fr); gap:10px;">
                 <input type="text" id="filterOrder" placeholder="篩選單號" oninput="renderLogs()">
                 <input type="date" id="filterDate" oninput="renderLogs()">
                 <input type="text" id="filterUser" placeholder="篩選人員" oninput="renderLogs()">
-                <select id="filterStatus" oninput="renderLogs()">
-                    <option value="">全部狀態</option>
-                    <option value="未啟用">未啟用 (含啟動按鈕)</option>
-                    <option value="已啟用">已啟用</option>
-                </select>
             </div>
 
             <div style="margin-bottom: 15px;">
@@ -388,7 +383,6 @@
         var fO = document.getElementById('filterOrder').value;
         var fD = document.getElementById('filterDate').value;
         var fU = document.getElementById('filterUser').value;
-        var fS = document.getElementById('filterStatus').value; // 抓取狀態篩選值
 
         var baseLogs = allLogs.filter(function(l) {
             var passUser = !fU || (l.data[11] || "").toString().includes(fU);
@@ -444,6 +438,7 @@
             
             if (!supplier || !giftName) return;
 
+            // 修正篩選：若有輸入篩選條件則過濾
             if (fO && !(useOrder.toString().includes(fO) || useOrder2.toString().includes(fO))) return;
             if (fD) {
                 var logDate = useTime ? new Date(useTime).toISOString().split('T')[0] : "";
@@ -451,10 +446,14 @@
                 if (logDate !== fD && logDate2 !== fD) return;
             }
             
+            // 只有真正進入「已使用」狀態的卡號才可以進來收集顯示
             if (status === "已使用") {
+                // 找出這次點擊確認批量使用動作的實際單號與時間
                 var actualOrder = useOrder || useOrder2 || "無單號";
                 var actualTime = useTime || useTime2 || "無時間";
 
+                // 【最核心修正 1】：群組 Key 徹底拋棄登記 Batch！改以「使用單號_使用時間_供應商_項目」作為唯一群組。
+                // 這樣可以確保在「禮券使用頁」點擊確認批量使用的那一組卡號，百分之百維持在同一個 Row 裡面顯示。
                 var groupKey = actualOrder + "_" + actualTime + "_" + supplier + "_" + giftName;
 
                 if (!useGroups[groupKey]) {
@@ -467,7 +466,7 @@
                         orderNo2: useOrder2 ? useOrder2 : "-",
                         timeStr2: useTime2 ? new Date(useTime2).toLocaleString() : "-",
                         activationStatuses: [],
-                        sortTimestamp: actualTime ? new Date(actualTime).getTime() : 0 
+                        sortTimestamp: actualTime ? new Date(actualTime).getTime() : 0 // 用於排序
                     };
                 }
                 
@@ -479,26 +478,19 @@
         var useLogBody = document.getElementById('useLogBody');
         useLogBody.innerHTML = "";
         
-        // 核心修正 1：完美依照最新使用時間（sortTimestamp）由新到舊排序
+        // 【最核心修正 2】：按「批量使用時間」進行由新到舊排序，新確認使用的單據直接排在最上方
         Object.keys(useGroups).sort(function(a, b) {
             return useGroups[b].sortTimestamp - useGroups[a].sortTimestamp;
         }).forEach(function(key) {
             var g = useGroups[key];
             if (g.codes.length === 0) return;
 
-            var hasUnactivated = g.activationStatuses.indexOf("未啟動") !== -1;
-            var hasActivated = g.activationStatuses.indexOf("已啟動") !== -1;
-
-            // 核心修正 2：加入啟用狀態控制與篩選判斷
-            // 有啟動按鈕的項目（包含全數未啟用、或部分未啟用）皆屬於「未啟用」
-            var isGroupUnactivated = hasUnactivated; // 只要有任何一筆未啟動，就是未啟用狀態（會出現啟動按鈕）
-            var isGroupFullyActivated = !hasUnactivated && hasActivated; // 全數已啟動，不含任何啟動按鈕
-
-            if (fS === "未啟用" && !isGroupUnactivated) return;
-            if (fS === "已啟用" && !isGroupFullyActivated) return;
-
             var total = g.codes.length;
             var codeStr = formatAllCodesToRanges(g.codes);
+
+            var hasUnactivated = g.activationStatuses.indexOf("未啟動") !== -1;
+            var hasActivated = g.activationStatuses.indexOf("已啟動") !== -1;
+            
             var actTdContent = "";
             
             var targetUnactivatedCodes = [];
