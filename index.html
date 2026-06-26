@@ -23,10 +23,10 @@
         .del-btn { background: #ff3b30; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
         .log-section { display: none; background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 8px; margin-top: 15px; }
         .log-section.active { display: block; }
+        .refresh-btn { padding: 10px 15px; background: #007bc2; color: white; border: none; cursor: pointer; height: 42px; align-self: center; margin-bottom: 20px;}
     </style>
 </head>
 <body>
-    <!-- 主功能選單按鈕 -->
     <button id="btn-register" class="tab-btn active" onclick="showTab('register')">禮券登記</button>
     <button id="btn-use" class="tab-btn" onclick="showTab('use')">禮券使用</button>
     <button id="btn-logs" class="tab-btn" onclick="showTab('logs')">流水帳記錄</button>
@@ -71,19 +71,18 @@
 
     <div id="logs" class="content">
         <h2>流水帳記錄</h2>
-        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-            <input type="text" id="filterOrder" placeholder="篩選單號" oninput="renderLogs()">
-            <input type="date" id="filterDate" oninput="renderLogs()">
-            <input type="text" id="filterUser" placeholder="篩選人員" oninput="renderLogs()">
+        <div style="display: flex; gap: 10px; margin-bottom: 20px; align-items: center;">
+            <input type="text" id="filterOrder" placeholder="篩選單號" oninput="renderLogs()" style="margin: 0;">
+            <input type="date" id="filterDate" oninput="renderLogs()" style="margin: 0;">
+            <input type="text" id="filterUser" placeholder="篩選人員" oninput="renderLogs()" style="margin: 0;">
+            <button id="manualRefreshBtn" class="refresh-btn" onclick="refreshLogsHand(this)" style="margin: 0;">重新整理</button>
         </div>
 
-        <!-- 選擇 流水帳子記錄 的按鈕 -->
         <div style="margin-bottom: 15px;">
             <button id="sub-btn-reg" class="sub-tab-btn active" onclick="showSubLog('reg')">禮券登記記錄</button>
             <button id="sub-btn-use" class="sub-tab-btn" onclick="showSubLog('use')">禮券使用記錄</button>
         </div>
 
-        <!-- 禮券登記記錄區塊 (修正：加入 登記時間 表格欄位) -->
         <div id="log-section-reg" class="log-section active">
             <h3>禮券登記記錄 (按每次確認顯示)</h3>
             <table>
@@ -96,7 +95,6 @@
             </table>
         </div>
 
-        <!-- 禮券使用記錄區塊 -->
         <div id="log-section-use" class="log-section">
             <h3>禮券使用記錄 (按每次確認顯示)</h3>
             <table>
@@ -136,26 +134,35 @@
             renderLogs();
         }
 
+        // 修正點：手動重新整理按鈕點擊觸發的函式
+        async function refreshLogsHand(btn) {
+            btn.innerText = "載入中...";
+            btn.disabled = true;
+            await refreshBatchDisplay();
+            allLogs = await (await fetch(API_URL + "?action=getLogs")).json();
+            renderLogs();
+            btn.innerText = "重新整理";
+            btn.disabled = false;
+        }
+
         function renderLogs() {
             var fO = document.getElementById('filterOrder').value;
             var fD = document.getElementById('filterDate').value;
             var fU = document.getElementById('filterUser').value;
 
             var filteredLogs = allLogs.filter(function(l) {
-                // 新結構對位：l.data[7] 為 單號, l.data[9] 為 單號2, l.data[11] 為 人員, l.data[12] 為 備註
-                // l.data[8] 為 時間, l.data[10] 為 時間2
                 var passOrder = !fO || (l.data[7] || "").toString().includes(fO) || (l.data[9] || "").toString().includes(fO);
                 var passUser = !fU || (l.data[11] || "").toString().includes(fU);
                 var logDate = l.data[8] ? new Date(l.data[8]).toISOString().split('T')[0] : "";
                 var logDate2 = l.data[10] ? new Date(l.data[10]).toISOString().split('T')[0] : "";
                 var passDate = !fD || logDate === fD || logDate2 === fD;
-                return passOrder && passUser && passDate && (l.data[12] !== "已登記刪除");
+                return passOrder && passUser && passDate && (l.data[12] !== "進登記刪除" && l.data[12] !== "已登記刪除");
             });
 
-            // --- 1. 處理禮券登記記錄 (修正來源：l.data[3] 為登記時間, l.data[4] 為 Code) ---
+            // --- 1. 處理禮券登記記錄 ---
             var regGroups = {};
             filteredLogs.forEach(function(l) {
-                if (l.data[6] === "已使用") return; // l.data[6] 是使用狀態
+                if (l.data[6] === "已使用") return; 
                 var batchId = l.data[0];
                 if (!batchId) return;
                 if (!regGroups[batchId]) {
@@ -186,14 +193,14 @@
                 regLogBody.appendChild(tr);
             });
 
-            // --- 2. 處理禮券使用記錄 (修正來源：對應 13 欄新架構位置) ---
+            // --- 2. 處理禮券使用記錄 ---
             var useGroups = {};
             filteredLogs.forEach(function(l) {
-                var useOrder = l.data[7];   // 7:單號
-                var useTime = l.data[8];    // 8:時間
-                var useOrder2 = l.data[9];  // 9:單號2
-                var useTime2 = l.data[10];  // 10:時間2
-                if (l.data[6] !== "已使用" || !useOrder) return; // 6:使用狀態
+                var useOrder = l.data[7];   
+                var useTime = l.data[8];    
+                var useOrder2 = l.data[9];  
+                var useTime2 = l.data[10];  
+                if (l.data[6] !== "已使用" || !useOrder) return; 
                 
                 var groupKey = useOrder + "_" + useTime + "_" + (useOrder2 || "");
                 if (!useGroups[groupKey]) {
@@ -207,7 +214,7 @@
                         time2: useTime2
                     };
                 }
-                useGroups[groupKey].codes.push(l.data[4].toString()); // 4:Code
+                useGroups[groupKey].codes.push(l.data[4].toString()); 
             });
 
             var useLogBody = document.getElementById('useLogBody');
