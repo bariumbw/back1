@@ -62,7 +62,9 @@
     <div id="logs" class="content">
         <h2>流水帳記錄</h2>
         <input type="text" id="filterOrder" placeholder="篩選單號" oninput="renderLogs()">
+        <input type="text" id="filterUser" placeholder="篩選人員" oninput="renderLogs()">
         <input type="date" id="filterDate" oninput="renderLogs()">
+        <input type="text" id="filterItem" placeholder="篩選項目" oninput="renderLogs()">
         <table>
             <thead>
                 <tr>
@@ -72,6 +74,7 @@
                     <th>首碼</th>
                     <th>尾碼</th>
                     <th>數量</th>
+                    <th>人員</th>
                     <th>單號</th>
                     <th>操作</th>
                 </tr>
@@ -105,9 +108,14 @@
 
         function renderLogs() {
             var fO = document.getElementById('filterOrder').value;
+            var fU = document.getElementById('filterUser').value;
             var fD = document.getElementById('filterDate').value;
+            var fI = document.getElementById('filterItem').value;
             var filtered = allLogs.filter(function(l) {
-                return l.data[6].toString().includes(fO) && (!fD || new Date(l.data[7]).toISOString().split('T')[0] === fD);
+                return (l.data[6]||"").toString().includes(fO) && 
+                       (l.data[8]||"").toString().includes(fU) && 
+                       (l.data[2]||"").toString().includes(fI) && 
+                       (!fD || new Date(l.data[7]).toISOString().split('T')[0] === fD);
             });
             filtered.sort(function(a, b) { return new Date(b.data[7]) - new Date(a.data[7]); });
             
@@ -118,7 +126,6 @@
             
             pageData.forEach(function(l) {
                 var tr = document.createElement('tr');
-                // 為了顯示完整，首碼取前6，尾碼取後6 (若長度不足則顯示完整)
                 var code = l.data[3].toString();
                 var head = code.length > 6 ? code.substring(0, 6) : code;
                 var tail = code.length > 6 ? code.substring(code.length - 6) : "";
@@ -129,6 +136,7 @@
                                "<td>" + head + "</td>" +
                                "<td>" + tail + "</td>" +
                                "<td>1</td>" +
+                               "<td>" + (l.data[8] || "") + "</td>" +
                                "<td>" + (l.data[6] || "") + "</td>" +
                                "<td><button onclick='editLog(\"" + l.sheet + "\", " + l.row + ")'>編</button>" +
                                    "<button onclick='delLog(\"" + l.sheet + "\", " + l.row + ")'>刪</button></td>";
@@ -147,9 +155,9 @@
         }
 
         async function editLog(s, r) {
-            var n = prompt("修改單號:");
+            var n = prompt("修改單號 (格式: 供應商,項目,編號,人員,單號):");
             if(n) {
-                await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'edit', sheet: s, row: r, newOrderNo: n}) });
+                await fetch(API_URL, { method: "POST", body: JSON.stringify({mode: 'edit', sheet: s, row: r, data: n}) });
                 loadLogs();
             }
         }
