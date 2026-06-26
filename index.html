@@ -296,7 +296,7 @@
         hideLoading();
     }
 
-    // 動態分析「未啟用」的卡號，並將連續代碼壓縮為“-”連接，不連續的單碼以“,”相隔的格式化核心邏輯
+    // 精確分析「未啟用」卡號區間並拼湊成指定格式化文字：(部分未啟動)xxxx,xxxx-xxxx未啟用
     function formatUnactivatedDetails(codes, statuses) {
         var unactivatedCodes = [];
         for (var i = 0; i < codes.length; i++) {
@@ -306,7 +306,6 @@
         }
         if (unactivatedCodes.length === 0) return "";
 
-        // 解析前綴英文字母與數字部分，以便能進行精準的連續範圍計算
         var parsed = unactivatedCodes.map(function(c) {
             var m = c.match(/^([A-Za-z]*)(.*)$/);
             var prefix = m[1] || "";
@@ -314,7 +313,6 @@
             return { prefix: prefix, num: parseInt(numStr, 10), raw: c };
         });
 
-        // 依據純數值由小到大排序
         parsed.sort(function(a, b) { return a.num - b.num; });
 
         var parts = [];
@@ -323,11 +321,9 @@
 
         for (var i = 1; i < parsed.length; i++) {
             var currentObj = parsed[i];
-            // 檢查前綴是否相同且數字部分是否連續
             if (currentObj.prefix === prevObj.prefix && currentObj.num === prevObj.num + 1) {
                 prevObj = currentObj;
             } else {
-                // 出現斷點，打包上一個連續區間
                 if (startObj.raw === prevObj.raw) {
                     parts.push(startObj.raw);
                 } else {
@@ -337,14 +333,14 @@
                 prevObj = currentObj;
             }
         }
-        // 處理最後一組區間
         if (startObj.raw === prevObj.raw) {
             parts.push(startObj.raw);
         } else {
             parts.push(startObj.raw + "-" + prevObj.raw);
         }
 
-        return parts.join(",");
+        // 回傳完全符合您指定樣式的括號與文字尾綴
+        return "(部分未啟動)" + parts.join(",") + "未啟用";
     }
 
     function renderLogs() {
@@ -413,8 +409,8 @@
                 if (logDate !== fD && logDate2 !== fD) return;
             }
             
-            // 【關鍵修正】：群組 Key 精確加入啟動狀態 (isActivated)，確保即使單號相同，未啟動與已啟動也絕對分拆在兩列獨立顯示
-            var groupKey = l.data[1] + "_" + l.data[2] + "_" + useOrder + "_" + useOrder2 + "_" + isActivated;
+            // 【最核心修正】：群組 Key 納入每次點確認點擊的使用時間戳記(useTime/useTime2)，達成依據每次點擊確認分開顯示、不合併
+            var groupKey = l.data[1] + "_" + l.data[2] + "_" + useOrder + "_" + useTime + "_" + useOrder2 + "_" + useTime2;
             if (!useGroups[groupKey]) {
                 useGroups[groupKey] = { 
                     supplier: l.data[1], 
@@ -437,7 +433,6 @@
             var g = useGroups[key];
             var total = g.codes.length;
             
-            // 純數值排序，徹底防止混亂字串干擾範圍的頭尾計算
             g.codes.sort(function(a, b) {
                 var na = parseInt(a.replace(/^\D+/g, ''), 10) || 0;
                 var nb = parseInt(b.replace(/^\D+/g, ''), 10) || 0;
@@ -455,10 +450,10 @@
             var actTdContent = "";
             var codeJsonStr = JSON.stringify(g.codes).replace(/"/g, '&quot;');
 
-            // 依據您的要求，當有部分未啟動時，完整呈現格式文字： (部分未啟動-xxxxxxxxx,xxxxxxxxx未啟用) 加上啟動按鈕
+            // 完美的格式判定：依據點擊區分後，若該次確認中包含部分未啟動
             if (hasUnactivated && hasActivated) {
                 var detailStr = formatUnactivatedDetails(g.codes, g.activationStatuses);
-                actTdContent = "<span style='color:orange; font-weight:600;'>部分未啟動-" + detailStr + "未啟用</span><br><button class='act-row-btn' style='margin-top:4px;' onclick='activateSelectedList(" + codeJsonStr + ")'>啟用</button>";
+                actTdContent = "<span style='color:orange; font-weight:600;'>" + detailStr + "</span><br><button class='act-row-btn' style='margin-top:4px;' onclick='activateSelectedList(" + codeJsonStr + ")'>啟用</button>";
             } else if (hasUnactivated) {
                 actTdContent = "<span style='color:red;'>未啟用</span><br><button class='act-row-btn' style='margin-top:4px;' onclick='activateSelectedList(" + codeJsonStr + ")'>啟用</button>";
             } else {
