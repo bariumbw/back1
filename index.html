@@ -26,6 +26,7 @@
     </style>
 </head>
 <body>
+    <!-- 主功能選單按鈕 -->
     <button id="btn-register" class="tab-btn active" onclick="showTab('register')">禮券登記</button>
     <button id="btn-use" class="tab-btn" onclick="showTab('use')">禮券使用</button>
     <button id="btn-logs" class="tab-btn" onclick="showTab('logs')">流水帳記錄</button>
@@ -76,11 +77,13 @@
             <input type="text" id="filterUser" placeholder="篩選人員" oninput="renderLogs()">
         </div>
 
+        <!-- 選擇 流水帳子記錄 的按鈕 -->
         <div style="margin-bottom: 15px;">
             <button id="sub-btn-reg" class="sub-tab-btn active" onclick="showSubLog('reg')">禮券登記記錄</button>
             <button id="sub-btn-use" class="sub-tab-btn" onclick="showSubLog('use')">禮券使用記錄</button>
         </div>
 
+        <!-- 禮券登記記錄區塊 -->
         <div id="log-section-reg" class="log-section active">
             <h3>禮券登記記錄 (按每次確認顯示)</h3>
             <table>
@@ -93,12 +96,13 @@
             </table>
         </div>
 
+        <!-- 禮券使用記錄區塊 (修正：顯示表格增加 單號2 與 時間2) -->
         <div id="log-section-use" class="log-section">
             <h3>禮券使用記錄 (按每次確認顯示)</h3>
             <table>
                 <thead>
                     <tr>
-                        <th>清單/範圍</th><th>Code 範圍/內容</th><th>總張數</th><th>供應商</th><th>項目</th><th>單號</th><th>時間</th>
+                        <th>清單/範圍</th><th>Code 範圍/內容</th><th>總張數</th><th>供應商</th><th>項目</th><th>單號</th><th>時間</th><th>單號2</th><th>時間2</th>
                     </tr>
                 </thead>
                 <tbody id="useLogBody"></tbody>
@@ -113,8 +117,7 @@
         window.onload = async function() {
             var res = await (await fetch(API_URL)).json();
             configData = res.config;
-            currentBatch = await (await fetch(API_URL + "?action=getBatch")).text();
-            document.getElementById('batchDisplay').innerText = currentBatch;
+            await refreshBatchDisplay();
             [...new Set(configData.map(function(r) { return r[0]; }))].forEach(function(s) {
                 var opt = document.createElement('option'); opt.value = s; opt.text = s;
                 document.getElementById('supplierSelect').appendChild(opt);
@@ -122,6 +125,11 @@
             updateGiftMenu();
             loadLogs();
         };
+
+        async function refreshBatchDisplay() {
+            currentBatch = await (await fetch(API_URL + "?action=getBatch")).text();
+            document.getElementById('batchDisplay').innerText = currentBatch;
+        }
 
         async function loadLogs() {
             allLogs = await (await fetch(API_URL + "?action=getLogs")).json();
@@ -174,15 +182,27 @@
                 regLogBody.appendChild(tr);
             });
 
-            // --- 2. 處理禮券使用記錄 ---
+            // --- 2. 處理禮券使用記錄 (修正：提取單號2、時間2數據進入群組) ---
             var useGroups = {};
             filteredLogs.forEach(function(l) {
                 var useOrder = l.data[6];
-                var useTime = l.data[9];
+                var useTime = l.data[7];
+                var useOrder2 = l.data[8];
+                var useTime2 = l.data[9];
                 if (l.data[5] !== "已使用" || !useOrder) return;
-                var groupKey = useOrder + "_" + useTime;
+                
+                // 以第一次確認或第二次確認的標記點作為分組基準
+                var groupKey = useOrder + "_" + useTime + "_" + (useOrder2 || "");
                 if (!useGroups[groupKey]) {
-                    useGroups[groupKey] = { supplier: l.data[1], gift: l.data[2], codes: [], orderNo: useOrder, time: useTime };
+                    useGroups[groupKey] = { 
+                        supplier: l.data[1], 
+                        gift: l.data[2], 
+                        codes: [], 
+                        orderNo: useOrder, 
+                        time: useTime,
+                        orderNo2: useOrder2,
+                        time2: useTime2
+                    };
                 }
                 useGroups[groupKey].codes.push(l.data[3].toString());
             });
@@ -197,6 +217,9 @@
                 var codeStr = g.codes[0] + " ~ " + g.codes[total - 1];
                 if (total === 1) codeStr = g.codes[0];
 
+                var t1 = g.time ? new Date(g.time).toLocaleString() : "";
+                var t2 = g.time2 ? new Date(g.time2).toLocaleString() : "";
+
                 var tr = document.createElement('tr');
                 tr.innerHTML = "<td>" + mode + "</td>" +
                                "<td>" + codeStr + "</td>" +
@@ -204,7 +227,9 @@
                                "<td>" + g.supplier + "</td>" +
                                "<td>" + g.gift + "</td>" +
                                "<td>" + g.orderNo + "</td>" +
-                               "<td>" + new Date(g.time).toLocaleString() + "</td>";
+                               "<td>" + t1 + "</td>" +
+                               "<td>" + (g.orderNo2 || "") + "</td>" +
+                               "<td>" + t2 + "</td>";
                 useLogBody.appendChild(tr);
             });
         }
@@ -229,7 +254,7 @@
         function applySuffixLogic(val, type) { var s = val.toString().trim(); if (type === "suffix_12") return s.slice(-12); if (type === "suffix_1") return s.slice(0, -1); if (type === "suffix_2") return s.slice(0, -2); return s; }
         function getRangeCodes(start, end) { var sVal = parseInt(start.slice(-12)), eVal = parseInt(end.slice(-12)), prefix = start.slice(0, -12); var codes = []; for (var i = sVal; i <= eVal; i++) { codes.push(prefix + i.toString().padStart(12, '0')); } return codes; }
         
-        // 恢復登記警示與覆蓋邏輯
+        // 修正：登記完成後改為刷新數據與 Batch，不再執行全頁跳轉
         async function register(confirmed) { 
             var btn = document.getElementById('regBtn'); 
             btn.innerText = "處理中..."; 
@@ -251,17 +276,24 @@
             
             if (res.result === "confirm") {
                 if (confirm(res.message)) {
-                    register(true); // 使用者點選確認覆蓋，再次發送帶有 confirm: true 的請求
+                    register(true); 
                 }
             } else if (res.result === "success") {
                 alert("登記完成！成功新增 " + res.count + " 筆。"); 
-                location.reload(); 
+                // 清空輸入框
+                document.getElementById('regStart').value = "";
+                document.getElementById('regEnd').value = "";
+                document.getElementById('regCodes').value = "";
+                document.getElementById('regTotal').innerText = "總張數: 0";
+                // 刷新資料，不跳頁
+                await refreshBatchDisplay();
+                loadLogs(); 
             } else {
                 alert("錯誤: " + res.message);
             }
         }
 
-        // 恢復使用警示與覆蓋邏輯
+        // 修正：使用完成後改為刷新數據，不再刷新全頁與跳轉
         async function useGift(confirmed) { 
             var btn = document.getElementById('useBtn'); 
             btn.innerText = "處理中..."; 
@@ -283,10 +315,19 @@
             if (res.result === "error") {
                 alert(res.message); 
             } else if (res.result === "confirm") { 
-                if(confirm(res.message)) useGift(true); // 使用者點選確認覆蓋
+                if(confirm(res.message)) useGift(true); 
             } else { 
                 alert("處理完成！"); 
-                location.reload(); 
+                // 清空輸入框
+                document.getElementById('useStart').value = "";
+                document.getElementById('useEnd').value = "";
+                document.getElementById('useCodes').value = "";
+                document.getElementById('orderNo').value = "";
+                document.getElementById('useTotal').innerText = "總張數: 0";
+                document.getElementById('useInfoDisplay').innerText = "請輸入編號...";
+                document.getElementById('useBtn').disabled = true;
+                // 刷新資料，不跳頁
+                loadLogs(); 
             } 
         }
 
