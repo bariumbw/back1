@@ -296,7 +296,7 @@
         hideLoading();
     }
 
-    // 分析未啟用卡號清單，嚴格根據您的範例格式：(部分未啟動)52505500832,52505500835,52505500837-52505500890未啟用
+    // 精確分析未啟動號碼，並完美支持順序（-）與不順序（,）號碼的混合拼湊
     function formatUnactivatedDetails(codes, statuses) {
         var unactivatedCodes = [];
         for (var i = 0; i < codes.length; i++) {
@@ -342,6 +342,43 @@
         return "(部分未啟動)" + parts.join(",") + "未啟用";
     }
 
+    // 將一整組卡號清單進行連續區間優化，供表格範圍欄位精確展示「一組組號碼範圍」
+    function formatAllCodesToRanges(codes) {
+        if (!codes || codes.length === 0) return "";
+        var parsed = codes.map(function(c) {
+            var m = c.match(/^([A-Za-z]*)(.*)$/);
+            var prefix = m[1] || "";
+            var numStr = m[2] || "0";
+            return { prefix: prefix, num: parseInt(numStr, 10), raw: c };
+        });
+        parsed.sort(function(a, b) { return a.num - b.num; });
+
+        var parts = [];
+        var startObj = parsed[0];
+        var prevObj = parsed[0];
+
+        for (var i = 1; i < parsed.length; i++) {
+            var currentObj = parsed[i];
+            if (currentObj.prefix === prevObj.prefix && currentObj.num === prevObj.num + 1) {
+                prevObj = currentObj;
+            } else {
+                if (startObj.raw === prevObj.raw) {
+                    parts.push(startObj.raw);
+                } else {
+                    parts.push(startObj.raw + "-" + prevObj.raw);
+                }
+                startObj = currentObj;
+                prevObj = currentObj;
+            }
+        }
+        if (startObj.raw === prevObj.raw) {
+            parts.push(startObj.raw);
+        } else {
+            parts.push(startObj.raw + "-" + prevObj.raw);
+        }
+        return parts.join(",");
+    }
+
     function renderLogs() {
         var fO = document.getElementById('filterOrder').value;
         var fD = document.getElementById('filterDate').value;
@@ -374,19 +411,11 @@
         Object.keys(regGroups).sort((a,b)=>b-a).forEach(function(key) {
             var g = regGroups[key];
             var total = g.codes.length;
-            
-            g.codes.sort(function(a, b) {
-                var na = parseInt(a.replace(/^\D+/g, ''), 10) || 0;
-                var nb = parseInt(b.replace(/^\D+/g, ''), 10) || 0;
-                return na - nb;
-            });
-
-            var mode = "範圍";
-            var codeStr = total === 1 ? g.codes[0] : g.codes[0] + "-" + g.codes[total - 1];
+            var codeStr = formatAllCodesToRanges(g.codes);
             var rTime = g.regTime ? new Date(g.regTime).toLocaleString() : "";
             
             var tr = document.createElement('tr');
-            tr.innerHTML = "<td>" + mode + "</td><td>" + codeStr + "</td><td>" + total + "</td><td>" + g.supplier + "</td><td>" + g.gift + "</td><td>" + rTime + "</td>";
+            tr.innerHTML = "<td>範圍</td><td>" + codeStr + "</td><td>" + total + "</td><td>" + g.supplier + "</td><td>" + g.gift + "</td><td>" + rTime + "</td>";
             regLogBody.appendChild(tr);
         });
 
@@ -400,7 +429,7 @@
             var useOrder2 = l.data[9] || "";  
             var useTime2 = l.data[10] || "";  
             
-            if (status !== "已使用" || (!useOrder && !useOrder2)) return; 
+            // 篩選：如果有人使用了單號篩選或日期篩選，進行過濾
             if (fO && !(useOrder.toString().includes(fO) || useOrder2.toString().includes(fO))) return;
             if (fD) {
                 var logDate = useTime ? new Date(useTime).toISOString().split('T')[0] : "";
@@ -408,63 +437,90 @@
                 if (logDate !== fD && logDate2 !== fD) return;
             }
             
-            // 依據每次確認點擊的時間戳記(useTime/useTime2)做核心群組，確保按確認次數分開顯示、絕不合併不同操作
-            var groupKey = l.data[1] + "_" + l.data[2] + "_" + useOrder + "_" + useTime + "_" + useOrder2 + "_" + useTime2;
+            // 【最核心修正】：不再用單號分類，直接以當初登記的 Batch 批次號（l.data[0]）作唯一群組，保證完整一組組顯示
+            var groupKey = l.data[0];
+            if (!groupKey) return;
+
             if (!useGroups[groupKey]) {
                 useGroups[groupKey] = { 
                     supplier: l.data[1], 
                     gift: l.data[2], 
                     codes: [], 
-                    orderNo: useOrder, 
-                    time: useTime,
-                    orderNo2: useOrder2,
-                    time2: useTime2,
-                    activationStatuses: []
+                    orders1: [],
+                    times1: [],
+                    orders2: [],
+                    times2: [],
+                    activationStatuses: [],
+                    hasUsedCards: false // 標記這組登記卡號中是否有任何一張已經被批量使用過
                 };
             }
+            
             useGroups[groupKey].codes.push(l.data[4].toString()); 
             useGroups[groupKey].activationStatuses.push(isActivated);
+
+            if (status === "已使用") {
+                useGroups[groupKey].hasUsedCards = true;
+                if (useOrder && useGroups[groupKey].orders1.indexOf(useOrder) === -1) useGroups[groupKey].orders1.push(useOrder);
+                if (useTime) { var t1 = new Date(useTime).toLocaleString(); if (useGroups[groupKey].times1.indexOf(t1) === -1) useGroups[groupKey].times1.push(t1); }
+                if (useOrder2 && useGroups[groupKey].orders2.indexOf(useOrder2) === -1) useGroups[groupKey].orders2.push(useOrder2);
+                if (useTime2) { var t2 = new Date(useTime2).toLocaleString(); if (useGroups[groupKey].times2.indexOf(t2) === -1) useGroups[groupKey].times2.push(t2); }
+            }
         });
 
         var useLogBody = document.getElementById('useLogBody');
         useLogBody.innerHTML = "";
-        Object.keys(useGroups).forEach(function(key) {
+        
+        // 由新到舊排序登記批次
+        Object.keys(useGroups).sort((a,b)=>b-a).forEach(function(key) {
             var g = useGroups[key];
+            
+            // 如果這整組登記的禮券，目前沒有任何一張卡片進入「已使用」狀態，則不顯示在「使用記錄」分頁中
+            if (!g.hasUsedCards) return;
+
             var total = g.codes.length;
-            
-            g.codes.sort(function(a, b) {
-                var na = parseInt(a.replace(/^\D+/g, ''), 10) || 0;
-                var nb = parseInt(b.replace(/^\D+/g, ''), 10) || 0;
-                return na - nb;
-            });
-            
-            var mode = "範圍";
-            var codeStr = total === 1 ? g.codes[0] : g.codes[0] + "-" + g.codes[total - 1];
-            var t1 = g.time ? new Date(g.time).toLocaleString() : "";
-            var t2 = g.time2 ? new Date(g.time2).toLocaleString() : "";
+            // 呼叫優化函式，確保此處能完美呈現一組組號碼（無論順序不順序都完美兼容）
+            var codeStr = formatAllCodesToRanges(g.codes);
 
             var hasUnactivated = g.activationStatuses.indexOf("未啟動") !== -1;
             var hasActivated = g.activationStatuses.indexOf("已啟動") !== -1;
             
             var actTdContent = "";
-            var codeJsonStr = JSON.stringify(g.codes).replace(/"/g, '&quot;');
+            
+            // 提煉出這一組中真正屬於「未啟動」狀態的卡號清單，按鈕只去啟用這些未啟動的代碼
+            var targetUnactivatedCodes = [];
+            for(var i=0; i<g.codes.length; i++) {
+                if(g.activationStatuses[i] === "未啟動") {
+                    targetUnactivatedCodes.push(g.codes[i]);
+                }
+            }
+            var unactJsonStr = JSON.stringify(targetUnactivatedCodes).replace(/"/g, '&quot;');
 
-            // 【最新修正與符合規則】：一組號碼內，若部分未啟動且部分已啟用
+            // 嚴格執行 2A, 2B 規則：
             if (hasUnactivated && hasActivated) {
+                // 部分未啟動且部分已啟用：2B 顯示已啟用 + 1/2A 顯示部分未啟動文字與啟用按鈕
                 var detailStr = formatUnactivatedDetails(g.codes, g.activationStatuses);
                 actTdContent = "<span style='color:green; font-weight:600;'>已啟用</span><br>" + 
                                "<span style='color:orange; font-weight:600; display:block; margin-top:4px;'>" + detailStr + "</span>" +
-                               "<button class='act-row-btn' style='margin-top:4px;' onclick='activateSelectedList(" + codeJsonStr + ")'>啟用</button>";
+                               "<button class='act-row-btn' style='margin-top:4px;' onclick='activateSelectedList(" + unactJsonStr + ")'>啟動按鈕</button>";
             } else if (hasUnactivated) {
                 // 全數為未啟動
-                actTdContent = "<span style='color:red;'>未啟用</span><br><button class='act-row-btn' style='margin-top:4px;' onclick='activateSelectedList(" + codeJsonStr + ")'>啟用</button>";
+                actTdContent = "<span style='color:red;'>未啟用</span><br><button class='act-row-btn' style='margin-top:4px;' onclick='activateSelectedList(" + unactJsonStr + ")'>啟動按鈕</button>";
             } else {
-                // 全數為已啟用
+                // 全數已啟用：2B 顯示已啟用
                 actTdContent = "<span style='color:green; font-weight:600;'>已啟用</span>";
             }
 
             var tr = document.createElement('tr');
-            tr.innerHTML = "<td>" + mode + "</td><td>" + codeStr + "</td><td>" + total + "</td><td>" + g.supplier + "</td><td>" + g.gift + "</td><td>" + g.orderNo + "</td><td>" + t1 + "</td><td>" + g.orderNo2 + "</td><td>" + t2 + "</td><td>" + actTdContent + "</td>";
+            tr.innerHTML = "<td>範圍</td>" +
+                           "<td>" + codeStr + "</td>" +
+                           "<td>" + total + "</td>" +
+                           "<td>" + g.supplier + "</td>" +
+                           "<td>" + g.gift + "</td>" +
+                           "<td>" + (g.orders1.join("<br>") || "-") + "</td>" +
+                           "<td>" + (g.times1.join("<br>") || "-") + "</td>" +
+                           "<td>" + (g.orders2.join("<br>") || "-") + "</td>" +
+                           "<td>" + (g.times2.join("<br>") || "-") + "</td>" +
+                           "<td>" + actTdContent + "</td>";
             useLogBody.appendChild(tr);
         });
 
@@ -557,7 +613,7 @@
 
     async function activateSelectedList(codes) {
         if(!codes || codes.length === 0) return;
-        if (!confirm("您確定要啟用這批共 " + codes.length + " 筆禮券嗎？")) return;
+        if (!confirm("您確定要啟用這批共 " + codes.length + " 筆尚未啟動的禮券嗎？")) return;
         if (!confirm("❗系統安全核對：確認要將此批禮券狀態變更為「已啟動」嗎？")) return;
         
         showLoading();
